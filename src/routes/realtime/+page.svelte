@@ -9,6 +9,7 @@
 
     import { env } from "$env/dynamic/public";
     import { WaveformService } from "$lib/services/WaveformService";
+    import { SeedlinkFramer } from "$lib/seedlink-framer";
     import HexGrid from "$lib/components/HexGrid.svelte";
     import HexShape from "$lib/components/HexShape.svelte";
     import StripeBar from "$lib/components/StripeBar.svelte";
@@ -25,6 +26,7 @@
     let seedLinkHost: string | undefined;
 
     let ws: WebSocket;
+    const seedlinkFramer = new SeedlinkFramer();
 
     let isDemoMode = false;
     let demoInterval: ReturnType<typeof setInterval>;
@@ -596,35 +598,32 @@
         };
 
         ws.onmessage = (e) => {
-            const dataBufferIncoming = e.data;
+            // A message is a raw chunk of the SeedLink stream, not one packet:
+            // it can hold command replies, part of a packet or several packets.
+            // Always feed the framer so it stays in sync, even while paused.
+            const { packets, replies } = seedlinkFramer.push(e.data);
+
             // Jangan proses data live saat historical mode aktif
             if (isDemoMode || isDemoPsychoMode || isHistoricalMode) {
                 return;
             }
 
-            const buffer = dataBufferIncoming; // ArrayBuffer
-
-            const decoder = new TextDecoder("utf-8");
-            const text = decoder.decode(buffer);
-
-            // console.log(text);
-            if (text.trim() == "OK") {
-                logMessages += `${new Date().toLocaleString()} : Server OK\n`;
-                return;
+            for (const reply of replies) {
+                logMessages += `${new Date().toLocaleString()} : Server ${reply}\n`;
             }
 
-            try {
-                waveformService.processMiniseed(
-                    dataBufferIncoming,
-                    nominalSampleRateMs,
-                );
-                dataBuffer = waveformService.getBuffer();
-                logMessages += `${new Date().toLocaleString()} : New Data...\n`;
-            } catch (err) {
-                console.log(e);
-                console.error("Error parsing miniSEED data:", err);
-                logMessages += `${new Date().toLocaleString()} : Error parsing miniSEED data: ${err}\n`;
-                logMessages += `${new Date().toLocaleString()} : ${text}\n`;
+            for (const packet of packets) {
+                try {
+                    waveformService.processMiniseed(
+                        packet,
+                        nominalSampleRateMs,
+                    );
+                    dataBuffer = waveformService.getBuffer();
+                    logMessages += `${new Date().toLocaleString()} : New Data...\n`;
+                } catch (err) {
+                    console.error("Error parsing miniSEED data:", err);
+                    logMessages += `${new Date().toLocaleString()} : Error parsing miniSEED data: ${err}\n`;
+                }
             }
         };
 
@@ -816,6 +815,8 @@
                                                             WebSocket.OPEN
                                                     ) {
                                                         console.log(request);
+                                                        // New stream: drop any partial packet of the old one.
+                                                        seedlinkFramer.reset();
                                                         ws.send(
                                                             JSON.stringify(
                                                                 request,

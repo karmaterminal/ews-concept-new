@@ -120,6 +120,10 @@ export class WaveformService {
         }
     }
 
+    /**
+     * Parse one complete SeedLink packet (8-byte "SL" header + miniSEED record).
+     * Raw WebSocket messages must go through SeedlinkFramer first.
+     */
     public processMiniseed(mseedDataBuffer: ArrayBuffer, nominalSampleRateMs: number = 10) {
         if (!this.seis) {
             console.warn("WaveformService not initialized with seisplotjs, ignoring data.");
