@@ -9,10 +9,13 @@
 		stateTone,
 		type Shape,
 	} from "$lib/canticle/shape";
-	import { createShapePoller } from "$lib/canticle/poller";
+	import { createFlowPoller, createShapePoller } from "$lib/canticle/poller";
+	import { minuteIntensity, sanitizeFlow, type Flow } from "$lib/canticle/flow";
 
 	let shape = $state<Shape>(sanitizeShape(null));
+	let flow = $state<Flow>(sanitizeFlow(null));
 	let poll: ReturnType<typeof setInterval> | undefined;
+	let flowPoll: ReturnType<typeof setInterval> | undefined;
 
 	function seconds(ms: number | null): string {
 		return ms === null ? "—" : `${(ms / 1000).toFixed(1)} s`;
@@ -27,14 +30,37 @@
 		},
 	});
 
+	const flowPoller = createFlowPoller({
+		fetch: (url, init) => fetch(url, init),
+		url: () =>
+			$page.url.searchParams.get("demo") === "1" ? "/api/canticle-flow?demo=1" : "/api/canticle-flow",
+		onFlow: (next) => {
+			flow = next;
+		},
+		// polled every 10 s, so allow two missed answers before it reads as no flow
+		maxAgeMs: 25000,
+	});
+
+	function clockTime(ms: number): string {
+		return new Date(ms).toLocaleTimeString([], { hour12: false });
+	}
+
+	function historyTime(ms: number): string {
+		return new Date(ms).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit" });
+	}
+
 	onMount(() => {
 		poller.tick();
 		poll = setInterval(poller.tick, 2000);
+		flowPoller.tick();
+		flowPoll = setInterval(flowPoller.tick, 10000);
 	});
 
 	onDestroy(() => {
 		poller.stop();
+		flowPoller.stop();
 		if (poll) clearInterval(poll);
+		if (flowPoll) clearInterval(flowPoll);
 	});
 </script>
 
@@ -61,6 +87,7 @@
 			{shape.connected ? "no stations shared with this display" : "no link to the canticle gateway"}
 		</section>
 	{:else}
+		<div class="history-layout">
 		<section class="station-grid" aria-label="Broadcast stations">
 			{#each shape.stations as station}
 				{@const tone = stateTone(station.state)}
@@ -98,9 +125,48 @@
 							</div>
 						{/each}
 					</div>
+					{#if flow.minutes.length > 0}
+						<div class="pulse-strip" aria-label={`60 minute pulse history for ${station.name}`}>
+							{#each flow.minutes as topMinute, i}
+								{@const flowStation = flow.stations.find((item) => item.name === station.name)}
+								{@const minute = flowStation?.minutes[i]}
+								{@const intensity = minute ? minuteIntensity(minute.arrivals) : 0}
+								<div
+									class="pulse-column"
+									class:not-observed={!topMinute.observed}
+									class:beacon={minute?.beacon}
+									title={topMinute.observed ? "observed" : "not observed"}
+								>
+									{#if intensity > 0}
+										<div class="pulse-bar" style={`height:${intensity * 100}%`}></div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</article>
 			{/each}
 		</section>
+
+		<aside class="river-panel" aria-label="Redacted recent arrivals">
+			<div class="river-head">
+				<span>RIVER</span>
+				<span>{flow.minutes.length > 0 ? `history since ${historyTime(flow.since_ms)}` : "NO FLOW"}</span>
+			</div>
+			{#if flow.minutes.length === 0}
+				<div class="river-empty">NO FLOW</div>
+			{:else}
+				{#each flow.river as item}
+					<div class="river-item">
+						<span class="river-time">{clockTime(item.at_ms)}</span>
+						<span class="river-station">{item.station}</span>
+						<span class="river-stream">{item.stream}</span>
+						<span class="redaction-bar" aria-label="redacted arrival detail">████████</span>
+					</div>
+				{/each}
+			{/if}
+		</aside>
+		</div>
 	{/if}
 
 	<footer>shape only — no station text is ever shown here</footer>
@@ -315,6 +381,124 @@
 		box-shadow: 0 0 8px var(--tone);
 	}
 
+	.history-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 300px;
+		align-items: start;
+		gap: 18px;
+		padding-right: 18px;
+	}
+
+	.history-layout .station-grid {
+		grid-template-columns: repeat(auto-fit, minmax(240px, 300px));
+		padding-right: 0;
+	}
+
+	.pulse-strip {
+		height: 42px;
+		margin: 8px 22px 0;
+		border: 1px solid rgba(250, 170, 0, 0.42);
+		background:
+			repeating-linear-gradient(90deg, transparent 0, transparent 4px, rgba(250, 170, 0, 0.08) 4px, rgba(250, 170, 0, 0.08) 5px),
+			#080808;
+		display: grid;
+		grid-template-columns: repeat(60, 1fr);
+		align-items: end;
+		gap: 1px;
+		padding: 3px 2px 2px;
+	}
+
+	/* one column per minute: arrivals rise as a bar, the carrier is a line along the foot */
+	.pulse-column {
+		position: relative;
+		height: 100%;
+		display: flex;
+		align-items: flex-end;
+	}
+
+	.pulse-bar {
+		width: 100%;
+		background: var(--orange);
+		opacity: 0.9;
+		box-shadow: 0 0 4px rgba(250, 170, 0, 0.55);
+	}
+
+	.pulse-column.not-observed {
+		opacity: 0.35;
+		background: repeating-linear-gradient(135deg, #777 0, #777 1px, transparent 1px, transparent 3px);
+	}
+
+	.pulse-column.beacon::after {
+		content: "";
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 2px;
+		background: #3cff9a;
+	}
+
+	.river-panel {
+		margin-top: 32px;
+		border: 1px solid rgba(250, 170, 0, 0.52);
+		background: rgba(0, 0, 0, 0.94);
+		min-height: 180px;
+		max-height: 720px;
+		overflow: auto;
+	}
+
+	.river-head {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		border-bottom: 2px solid var(--orange);
+		padding: 10px;
+		font-size: 11px;
+		font-weight: 900;
+		letter-spacing: 0.1em;
+	}
+
+	.river-head span:last-child {
+		color: white;
+		font-size: 9px;
+	}
+
+	.river-item {
+		display: grid;
+		grid-template-columns: 64px minmax(70px, 1fr) minmax(60px, 1fr) 72px;
+		align-items: center;
+		gap: 6px;
+		min-height: 34px;
+		border-bottom: 1px solid rgba(250, 170, 0, 0.18);
+		padding: 5px 8px;
+		font-size: 9px;
+	}
+
+	.river-time,
+	.river-station,
+	.river-stream {
+		overflow-wrap: anywhere;
+	}
+
+	.redaction-bar {
+		width: 72px;
+		display: inline-block;
+		color: #050505;
+		background: var(--orange);
+		text-align: center;
+		overflow: hidden;
+		white-space: nowrap;
+		letter-spacing: 0.02em;
+		font-weight: 900;
+	}
+
+	.river-empty {
+		padding: 28px 10px;
+		text-align: center;
+		color: var(--red);
+		font-weight: 900;
+	}
+
 	.empty-state {
 		margin: 40px 18px;
 		border: 1px solid rgba(250, 170, 0, 0.5);
@@ -351,6 +535,17 @@
 		.statuses { justify-content: flex-start; }
 		.station-grid {
 			grid-template-columns: minmax(220px, 300px);
+		}
+		.history-layout {
+			grid-template-columns: 1fr;
+			padding: 0 18px;
+		}
+		.history-layout .station-grid {
+			grid-template-columns: minmax(220px, 300px);
+			padding: 32px 0 20px;
+		}
+		.river-panel {
+			margin-top: 0;
 		}
 	}
 </style>
