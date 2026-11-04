@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_DRUM, beaconTicks, sanitizeDrum, traceRow } from "./drum";
+import { DEMO_DRUM, beaconTicks, carrierRuns, isObserved, penIsLive, resolveStation, sanitizeDrum, traceRow } from "./drum";
 
 describe("sanitizeDrum", () => {
 	it("drops extra keys and hostile names", () => {
@@ -126,5 +126,72 @@ describe("drum tracing", () => {
 	it("creates demo data", () => {
 		expect(DEMO_DRUM(1000000).synthetic).toBe(true);
 		expect(DEMO_DRUM(1000000).stations).toHaveLength(3);
+	});
+});
+
+// A producer-shaped day: a connection, a socket end, a rejoin 20 s later (two unobserved buckets), and beacon buckets
+// on both sides of the gap that a 2-bucket join would bridge.  Bucket 0 of row 0 is start_ms.
+function reconnectDrum(nowBucket = 60) {
+	return sanitizeDrum({
+		now_ms: nowBucket * 10000 + 5000,
+		start_ms: 0,
+		bucket_ms: 10000,
+		row_ms: 900000,
+		rows: 96,
+		observed: [[0, 30], [32, 50]],
+		streams: ["a"],
+		stations: [
+			{ name: "one", beacons: [27, 28, 29, 31, 32, 33, 49, 55], arrivals: [[29, 0, 2], [33, 0, 1]] },
+			{ name: "two", beacons: [1], arrivals: [] },
+		],
+	});
+}
+
+describe("every drawn line breaks where a bucket is unobserved (🌫 on ews#7)", () => {
+	it("no carrier run spans the reconnect gap, and none starts in an unobserved or future bucket", () => {
+		const drum = reconnectDrum();
+		expect(carrierRuns(drum, 0, 0)).toEqual([[27, 30], [32, 34], [49, 50]]);
+	});
+
+	it("walks every row: no trace point and no carrier bucket is unobserved", () => {
+		for (const drum of [reconnectDrum(), sanitizeDrum(DEMO_DRUM(Date.UTC(2026, 10, 4, 18, 7, 25)))]) {
+			for (let station = 0; station < drum.stations.length; station++) {
+				for (let row = 0; row < drum.rows; row++) {
+					const from = row * 90;
+					for (const [x1, x2] of carrierRuns(drum, station, row)) {
+						for (let x = x1; x < x2; x++) expect(isObserved(drum, from + x)).toBe(true);
+					}
+					for (const segment of traceRow(drum, station, row)) {
+						for (const point of segment) expect(isObserved(drum, from + point.x)).toBe(true);
+					}
+				}
+			}
+		}
+	});
+
+	it("the pen is live only when the bucket holding now is observed", () => {
+		expect(penIsLive(reconnectDrum(45))).toBe(true);
+		expect(penIsLive(reconnectDrum(60))).toBe(false);
+		expect(penIsLive(sanitizeDrum(null))).toBe(false);
+	});
+});
+
+describe("resolveStation (🌫 on ews#7: the picker reverted on the next poll)", () => {
+	it("keeps the station picked after the page loaded with another one in the URL", () => {
+		const drum = reconnectDrum();
+		let wanted: string | null = "one";                                  // ?station=one at load
+		let index = resolveStation(drum, wanted, 0);
+		expect(index).toBe(0);
+		wanted = "two";                                                     // the reader picks two
+		index = 1;
+		for (let poll = 0; poll < 3; poll++) index = resolveStation(drum, wanted, index);
+		expect(drum.stations[index].name).toBe("two");
+	});
+
+	it("falls back to the current index, then the first, when the wanted station is gone", () => {
+		const drum = reconnectDrum();
+		expect(resolveStation(drum, "gone", 1)).toBe(1);
+		expect(resolveStation(drum, "gone", 5)).toBe(0);
+		expect(resolveStation(drum, null, 1)).toBe(1);
 	});
 });

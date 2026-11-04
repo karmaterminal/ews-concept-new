@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { onDestroy, onMount } from "svelte";
 	import { page } from "$app/stores";
+	import { replaceState } from "$app/navigation";
 	import { createPoller } from "$lib/canticle/poller";
-	import { sanitizeDrum, traceRow, beaconTicks, type Drum } from "$lib/canticle/drum";
+	import { sanitizeDrum, traceRow, carrierRuns, resolveStation, penIsLive, type Drum } from "$lib/canticle/drum";
 
 	let drum = $state<Drum>(sanitizeDrum(null));
 	let poll: ReturnType<typeof setInterval> | undefined;
 	let stationIndex = $state(0);
+	// the station asked for, read from the URL once; a poll resolves against this, never against $page.url
+	let wanted: string | null = $page.url.searchParams.get("station");
 
 	const inks = ["#faaa00", "#ff3b30", "#3cff9a", "#33ccff"];
 	const chartLeft = 74;
@@ -23,10 +26,7 @@
 			: "/api/canticle-drum",
 		onValue: (next) => {
 			drum = next;
-			const requested = $page.url.searchParams.get("station");
-			const found = requested ? next.stations.findIndex((station) => station.name === requested) : -1;
-			if (found >= 0) stationIndex = found;
-			else if (stationIndex >= next.stations.length) stationIndex = 0;
+			stationIndex = resolveStation(next, wanted, stationIndex);
 		},
 		sanitize: sanitizeDrum,
 		empty: sanitizeDrum(null),
@@ -36,9 +36,10 @@
 
 	function selectStation(index: number): void {
 		stationIndex = index;
-		const url = new URL($page.url);
-		url.searchParams.set("station", drum.stations[index]?.name ?? "");
-		history.replaceState(history.state, "", url);
+		wanted = drum.stations[index]?.name ?? null;
+		const url = new URL(window.location.href);
+		url.searchParams.set("station", wanted ?? "");
+		replaceState(url, {});
 	}
 
 	function localTime(ms: number): string {
@@ -55,27 +56,6 @@
 
 	function yFor(row: number, y: number): number {
 		return chartTop + row * rowHeight + 5.25 - y * 4.8;
-	}
-
-	// the carrier as runs of consecutive beacon buckets (a gap of up to 2 buckets is still one run): one faint line
-	// under the baseline that breaks where beacons stop, instead of a tick per 10 s
-	function carrierRuns(row: number): { x1: number; x2: number }[] {
-		const ticks = beaconTicks(drum, stationIndex, row).sort((a, b) => a - b);
-		const runs: { x1: number; x2: number }[] = [];
-		let from = -1;
-		let last = -1;
-		for (const tick of ticks) {
-			if (from < 0) {
-				from = last = tick;
-			} else if (tick - last <= 2) {
-				last = tick;
-			} else {
-				runs.push({ x1: xFor(from), x2: xFor(Math.min(89, last + 1)) });
-				from = last = tick;
-			}
-		}
-		if (from >= 0) runs.push({ x1: xFor(from), x2: xFor(Math.min(89, last + 1)) });
-		return runs;
 	}
 
 	function polyline(row: number, segment: { x: number; y: number }[]): string {
@@ -167,17 +147,20 @@
 					{#if row % 4 === 0}
 						<text x="8" y={baseline + 3} class="row-label">{localTime(rowStart(row))}</text>
 					{/if}
-					{#each carrierRuns(row) as run}
-						<line x1={run.x1} x2={run.x2} y1={baseline + 4} y2={baseline + 4} class="carrier-run"></line>
+					<!-- the carrier: runs of observed beacon buckets that never cross an unobserved one -->
+					{#each carrierRuns(drum, stationIndex, row) as [x1, x2]}
+						<line x1={xFor(x1)} x2={xFor(x2)} y1={baseline + 4} y2={baseline + 4} class="carrier-run"></line>
 					{/each}
 				{/each}
 
+				{#if penIsLive(drum)}
 				<circle
 					cx={chartLeft + (Math.max(0, Math.min(drum.row_ms, drum.now_ms - rowStart(95))) / drum.row_ms) * chartWidth}
 					cy={chartTop + 95 * rowHeight + 5.25}
 					r="3"
 					class="live-dot"
 				></circle>
+				{/if}
 			</svg>
 		</section>
 

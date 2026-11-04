@@ -236,3 +236,37 @@ export function beaconTicks(drum: Drum, stationIndex: number, row: number): numb
 		.filter((bucket) => bucket >= from && bucket < to)
 		.map((bucket) => bucket - from);
 }
+
+// The carrier under one row as [from, to) runs of bucket-in-row indices.  A run is built only from beacon buckets that
+// are observed and not in the future, and two of them join (across a gap of up to 2 buckets) only when every bucket
+// between them is observed too: no carrier line ever crosses an unobserved stretch (🌫 on ews#7).
+export function carrierRuns(drum: Drum, stationIndex: number, row: number): [number, number][] {
+	const from = row * BUCKETS_PER_ROW;
+	const latestBucket = Math.floor((drum.now_ms - drum.start_ms) / drum.bucket_ms);
+	const seen = (x: number) => from + x <= latestBucket && isObserved(drum, from + x);
+	const ticks = beaconTicks(drum, stationIndex, row).filter(seen).sort((a, b) => a - b);
+	const runs: [number, number][] = [];
+	for (const tick of ticks) {
+		const run = runs[runs.length - 1];
+		if (run && tick - run[1] <= 2 && Array.from({ length: tick - run[1] }, (_, k) => run[1] + k).every(seen)) {
+			run[1] = tick + 1;
+		} else {
+			runs.push([tick, tick + 1]);
+		}
+	}
+	return runs;
+}
+
+// The station a poll should show: the one named ``wanted`` if it is still on the drum, else the current index if it is
+// still in range, else the first.  The page keeps ``wanted`` itself and never re-reads it from the URL on a poll.
+export function resolveStation(drum: Drum, wanted: string | null, current: number): number {
+	const found = wanted ? drum.stations.findIndex((station) => station.name === wanted) : -1;
+	if (found >= 0) return found;
+	return current >= 0 && current < drum.stations.length ? current : 0;
+}
+
+// Whether the pen may be drawn as live: only when the bucket holding now is observed.
+export function penIsLive(drum: Drum): boolean {
+	const latestBucket = Math.floor((drum.now_ms - drum.start_ms) / drum.bucket_ms);
+	return drum.stations.length > 0 && isObserved(drum, latestBucket);
+}
