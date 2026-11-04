@@ -77,6 +77,9 @@ binary-canticle#133. That is consent, but the host holds it. The prince must be 
   counter can't: a display cut off from the network when the prince plucks.
   - "At once" holds only where the revocation arrives. Every read checks the current grant, and fails closed when it
     can't.
+  - Narrowing a grant purges the history and any statistics derived from the scopes it removed, not only future
+    rows (🌫).
+  - *Withheld* is never inferred from silence. Only the prince's grant can say it (🌫).
   - Whatever is already in a browser can't be recalled. The page should hold as little as it can (no history kept
     client-side beyond what is on screen).
 
