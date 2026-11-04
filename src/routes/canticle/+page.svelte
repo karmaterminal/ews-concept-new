@@ -135,10 +135,11 @@
 								<div
 									class="pulse-column"
 									class:not-observed={!topMinute.observed}
-									class:beacon={minute?.beacon}
+									class:beacon={topMinute.observed && minute?.beacon}
 									title={topMinute.observed ? "observed" : "not observed"}
 								>
-									{#if intensity > 0}
+									<!-- an unobserved minute is hatch only: no carrier foot and no bar (🌫 on ews#7) -->
+									{#if topMinute.observed && intensity > 0}
 										<div class="pulse-bar" style={`height:${Math.max(intensity * 100, 30)}%`}></div>
 									{/if}
 								</div>
