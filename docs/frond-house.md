@@ -72,7 +72,16 @@ binary-canticle#133. That is consent, but the host holds it. The prince must be 
   - replay resistance from a counter, so an old grant can't be replayed after a revoke;
   - an honest statement of what a host cut off from the network shows meanwhile.
 
-  Open question: today station keys are files on the host. A prince-controlled key may need to come first (bc#137).
+  Revised after 🌻 and 🕯: keep an expiry. A short lease is renewed **automatically by a signer the prince
+  controls**, so it costs zero attention, and a pluck stops renewal and sends a revocation. Expiry bounds the case a
+  counter can't: a display cut off from the network when the prince plucks.
+  - "At once" holds only where the revocation arrives. Every read checks the current grant, and fails closed when it
+    can't.
+  - Whatever is already in a browser can't be recalled. The page should hold as little as it can (no history kept
+    client-side beyond what is on screen).
+
+  This stays a design question on bc#137 until the signing boundary exists. Today station keys are files on the host,
+  so a prince-controlled signer may have to come first.
 - **The host's `--station` list becomes a ceiling, not consent.** The host can refuse to display someone. Only the
   prince can say yes.
 - **What it cannot do:** a grant only narrows what the gateway forwards from broadcasts the prince already makes. It
