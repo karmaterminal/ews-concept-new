@@ -9,6 +9,7 @@
 		stateTone,
 		type Shape,
 	} from "$lib/canticle/shape";
+	import { createShapePoller } from "$lib/canticle/poller";
 
 	let shape = $state<Shape>(sanitizeShape(null));
 	let poll: ReturnType<typeof setInterval> | undefined;
@@ -17,25 +18,22 @@
 		return ms === null ? "—" : `${(ms / 1000).toFixed(1)} s`;
 	}
 
-	async function pollShape() {
-		try {
-			const demo = $page.url.searchParams.get("demo") === "1";
-			const response = await fetch(
-				demo ? "/api/canticle-shape?demo=1" : "/api/canticle-shape",
-			);
-			if (!response.ok) return;
-			shape = sanitizeShape(await response.json());
-		} catch {
-			shape = sanitizeShape(null);
-		}
-	}
+	const poller = createShapePoller({
+		fetch: (url, init) => fetch(url, init),
+		url: () =>
+			$page.url.searchParams.get("demo") === "1" ? "/api/canticle-shape?demo=1" : "/api/canticle-shape",
+		onShape: (next) => {
+			shape = next;
+		},
+	});
 
 	onMount(() => {
-		pollShape();
-		poll = setInterval(pollShape, 2000);
+		poller.tick();
+		poll = setInterval(poller.tick, 2000);
 	});
 
 	onDestroy(() => {
+		poller.stop();
 		if (poll) clearInterval(poll);
 	});
 </script>
@@ -59,7 +57,9 @@
 	{/if}
 
 	{#if shape.stations.length === 0}
-		<section class="empty-state">no stations shared with this display</section>
+		<section class="empty-state">
+			{shape.connected ? "no stations shared with this display" : "no link to the canticle gateway"}
+		</section>
 	{:else}
 		<section class="station-grid" aria-label="Broadcast stations">
 			{#each shape.stations as station}
@@ -70,6 +70,7 @@
 						<div class="hex-content">
 							<div
 								class="carrier-ring"
+								class:unlit={level === 0}
 								style={`--carrier-level:${level}; --ring-scale:${0.82 + level * 0.18}; --ring-opacity:${0.18 + level * 0.82}`}
 							></div>
 							<div class="station-name">{station.name}</div>
@@ -231,6 +232,11 @@
 		box-shadow: 0 0 16px var(--tone), inset 0 0 12px var(--tone);
 		animation: carrier-pulse 2s ease-in-out infinite;
 		pointer-events: none;
+	}
+
+	/* no carrier (no beacon, or one 30 s old or more): no ring and no pulse */
+	.carrier-ring.unlit {
+		display: none;
 	}
 
 	.station-name {
