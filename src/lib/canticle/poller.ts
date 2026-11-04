@@ -1,4 +1,5 @@
 import { sanitizeShape, type Shape } from "./shape";
+import { sanitizeFlow, type Flow } from "./flow";
 
 type ShapeFetch = (url: string, init: { signal: AbortSignal; cache: RequestCache }) => Promise<Response>;
 
@@ -26,23 +27,51 @@ export const POLL_MAX_AGE_MS = 6000;
  * - With no good answer for `maxAgeMs`, the shape reads disconnected even if a request is still pending.
  */
 export function createShapePoller(options: ShapePollerOptions) {
+	return createPoller<Shape>({
+		fetch: options.fetch,
+		url: options.url,
+		onValue: options.onShape,
+		sanitize: sanitizeShape,
+		empty: sanitizeShape(null),
+		isCurrent: (shape) => shape.connected,
+		now: options.now,
+		timeoutMs: options.timeoutMs,
+		maxAgeMs: options.maxAgeMs,
+	});
+}
+
+export type CanticlePollerOptions<T> = {
+	fetch: ShapeFetch;
+	url: () => string;
+	onValue: (value: T) => void;
+	sanitize: (raw: unknown) => T;
+	empty: T | (() => T);
+	isCurrent?: (value: T) => boolean;
+	now?: () => number;
+	timeoutMs?: number;
+	maxAgeMs?: number;
+};
+
+export function createPoller<T>(options: CanticlePollerOptions<T>) {
 	const now = options.now ?? Date.now;
 	const timeoutMs = options.timeoutMs ?? POLL_TIMEOUT_MS;
 	const maxAgeMs = options.maxAgeMs ?? POLL_MAX_AGE_MS;
+	const getEmpty = () => typeof options.empty === "function" ? (options.empty as () => T)() : options.empty;
+	const isCurrent = options.isCurrent ?? (() => true);
 	let inFlight = false;
 	let lastGoodAt: number | null = null;
 	let showingConnected = false;
 	let stopped = false;
 
-	function show(shape: Shape) {
+	function show(value: T) {
 		if (stopped) return;
-		showingConnected = shape.connected;
-		options.onShape(shape);
+		showingConnected = isCurrent(value);
+		options.onValue(value);
 	}
 
 	async function tick(): Promise<void> {
 		if (showingConnected && (lastGoodAt === null || now() - lastGoodAt > maxAgeMs)) {
-			show(sanitizeShape(null));
+			show(getEmpty());
 		}
 		if (inFlight || stopped) return;
 		inFlight = true;
@@ -50,15 +79,17 @@ export function createShapePoller(options: ShapePollerOptions) {
 		const timer = setTimeout(() => controller.abort(), timeoutMs);
 		try {
 			const response = await options.fetch(options.url(), { signal: controller.signal, cache: "no-store" });
-			if (!response.ok) {
-				show(sanitizeShape(null));
+			if (!response.ok || controller.signal.aborted) {
+				show(getEmpty());
 				return;
 			}
-			const shape = sanitizeShape(await response.json());
+			const value = options.sanitize(await response.json());
+			// A fetch that ignored its abort and settled late is not a good answer (🌫 on #3).
+			if (controller.signal.aborted) throw new Error("aborted");
 			lastGoodAt = now();
-			show(shape);
+			show(value);
 		} catch {
-			show(sanitizeShape(null));
+			show(getEmpty());
 		} finally {
 			clearTimeout(timer);
 			inFlight = false;
@@ -71,4 +102,22 @@ export function createShapePoller(options: ShapePollerOptions) {
 			stopped = true;
 		},
 	};
+}
+
+export type FlowPollerOptions = Omit<CanticlePollerOptions<Flow>, "sanitize" | "empty" | "isCurrent" | "onValue"> & {
+	onFlow: (flow: Flow) => void;
+};
+
+export function createFlowPoller(options: FlowPollerOptions) {
+	return createPoller<Flow>({
+		fetch: options.fetch,
+		url: options.url,
+		onValue: options.onFlow,
+		sanitize: sanitizeFlow,
+		empty: sanitizeFlow(null),
+		isCurrent: (flow) => flow.minutes.length > 0,
+		now: options.now,
+		timeoutMs: options.timeoutMs,
+		maxAgeMs: options.maxAgeMs,
+	});
 }

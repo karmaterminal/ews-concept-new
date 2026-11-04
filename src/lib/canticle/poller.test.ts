@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createShapePoller, POLL_MAX_AGE_MS, POLL_TIMEOUT_MS } from "./poller";
 import type { Shape } from "./shape";
+import { createFlowPoller } from "./poller";
+import type { Flow } from "./flow";
 
 const GOOD = {
 	now_ms: 1,
@@ -64,6 +66,37 @@ describe("createShapePoller", () => {
 		expect(h.last()).toMatchObject({ connected: true, stations: [{ beacon_age_ms: 900 }] });
 	});
 
+	describe("createFlowPoller", () => {
+		it("uses the same stale and invalidation rules for flow", async () => {
+			const shown: Flow[] = [];
+			let t = 0;
+			const good: Flow = {
+				now_ms: 1,
+				since_ms: 0,
+				minute_ms: 60000,
+				synthetic: false,
+				minutes: [{ t: 1, observed: true }],
+				stations: [{ name: "cael", minutes: [{ beacon: true, state: "unknown", arrivals: [] }] }],
+				river: [],
+			};
+			const queue: Response[] = [
+				new Response(JSON.stringify(good), { status: 200 }),
+				new Response("bad gateway", { status: 503 }),
+			];
+			const poller = createFlowPoller({
+				fetch: vi.fn(async () => queue.shift() as Response),
+				url: () => "/api/canticle-flow",
+				onFlow: (flow) => shown.push(flow),
+				now: () => t,
+			});
+			await poller.tick();
+			expect(shown.at(-1)?.stations).toHaveLength(1);
+			t = POLL_MAX_AGE_MS + 1;
+			await poller.tick();
+			expect(shown.at(-1)?.stations).toEqual([]);
+		});
+	});
+
 	it("reads disconnected when the request throws or the body is not JSON", async () => {
 		const h = harness();
 		h.queue.push(async () => ok(), async () => Promise.reject(new TypeError("network")));
@@ -123,6 +156,20 @@ describe("createShapePoller", () => {
 		await h.poller.tick();
 		expect(h.fetch).toHaveBeenCalledTimes(3);
 		expect(h.last().connected).toBe(true);
+	});
+
+	it("does not take an answer that ignored its abort and settled late (🌫 on #3)", async () => {
+		vi.useFakeTimers();
+		const h = harness();
+		h.queue.push(async () => ok());
+		await h.poller.tick();
+		let settle!: (r: Response) => void;
+		h.queue.push(() => new Promise<Response>((resolve) => (settle = resolve))); // never listens to the signal
+		const pending = h.poller.tick();
+		await vi.advanceTimersByTimeAsync(POLL_TIMEOUT_MS);
+		settle(ok());
+		await pending;
+		expect(h.last().connected).toBe(false);
 	});
 
 	it("shows nothing after it is stopped", async () => {

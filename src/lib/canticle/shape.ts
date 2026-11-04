@@ -23,8 +23,8 @@ export type Shape = {
 	stations: ShapeStation[];
 };
 
-const IDENTIFIER = /^[A-Za-z0-9._:-]{1,64}$/;
-const STATES = new Set([
+export const CANTICLE_IDENTIFIER = /^[A-Za-z0-9._:-]{1,64}$/;
+export const CANTICLE_STATES = new Set([
 	"EQUIPPED_SPEAKING",
 	"EQUIPPED_QUIET",
 	"UNEQUIPPED_PRESENT",
@@ -69,14 +69,14 @@ export function sanitizeShape(raw: unknown): Shape {
 		for (const rawStation of source.stations.slice(0, 32)) {
 			if (typeof rawStation !== "object" || rawStation === null || Array.isArray(rawStation)) continue;
 			const station = rawStation as Record<string, unknown>;
-			if (typeof station.name !== "string" || !IDENTIFIER.test(station.name)) continue;
+			if (typeof station.name !== "string" || !CANTICLE_IDENTIFIER.test(station.name)) continue;
 
 			const streams: ShapeStream[] = [];
 			if (Array.isArray(station.streams)) {
 				for (const rawStream of station.streams.slice(0, 16)) {
 					if (typeof rawStream !== "object" || rawStream === null || Array.isArray(rawStream)) continue;
 					const stream = rawStream as Record<string, unknown>;
-					if (typeof stream.stream !== "string" || !IDENTIFIER.test(stream.stream)) continue;
+					if (typeof stream.stream !== "string" || !CANTICLE_IDENTIFIER.test(stream.stream)) continue;
 					const liveValue = nonNegativeNumber(stream.live);
 					const live = liveValue === null ? 0 : Math.floor(liveValue);
 					streams.push({
@@ -89,7 +89,7 @@ export function sanitizeShape(raw: unknown): Shape {
 
 			stations.push({
 				name: station.name,
-				state: typeof station.state === "string" && STATES.has(station.state)
+				state: typeof station.state === "string" && CANTICLE_STATES.has(station.state)
 					? station.state
 					: "unknown",
 				beacon_age_ms: nonNegativeNumber(station.beacon_age_ms),
