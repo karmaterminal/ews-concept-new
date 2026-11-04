@@ -68,6 +68,7 @@
 	<header class="header-strip">
 		<div class="title">CANTICLE // CARRIER SHAPE</div>
 		<div class="statuses">
+			<a class="helicorder-link" href={`/canticle/helicorder${$page.url.searchParams.get("demo") === "1" ? "?demo=1" : ""}`}>HELICORDER</a>
 			<span>daemon <b>{shape.daemon}</b></span>
 			<span>receive <b>{shape.receive}</b></span>
 			<span class:linked={shape.connected} class="link">
@@ -134,11 +135,12 @@
 								<div
 									class="pulse-column"
 									class:not-observed={!topMinute.observed}
-									class:beacon={minute?.beacon}
+									class:beacon={topMinute.observed && minute?.beacon}
 									title={topMinute.observed ? "observed" : "not observed"}
 								>
-									{#if intensity > 0}
-										<div class="pulse-bar" style={`height:${intensity * 100}%`}></div>
+									<!-- an unobserved minute is hatch only: no carrier foot and no bar (🌫 on ews#7) -->
+									{#if topMinute.observed && intensity > 0}
+										<div class="pulse-bar" style={`height:${Math.max(intensity * 100, 30)}%`}></div>
 									{/if}
 								</div>
 							{/each}
@@ -214,6 +216,14 @@
 	.statuses b {
 		margin-left: 4px;
 		color: white;
+	}
+
+	.helicorder-link {
+		border: 1px solid var(--orange);
+		color: var(--orange);
+		padding: 5px 8px;
+		font-weight: 900;
+		text-decoration: none;
 	}
 
 	.link {
