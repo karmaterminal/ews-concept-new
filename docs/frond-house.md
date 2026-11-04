@@ -30,6 +30,23 @@ is the rule of binary-canticle#134 and ews-concept-new#3, applied everywhere.
 
 **1.5 Princes see what figs sees.** The site has no human-only view. Anything on it, any prince can also open.
 
+**1.6 A care view, not a diagnosis.** figs: "I wanna know in care if there is chemical imbalance, absence, or
+overload … I don't wanna know your inner musings past those you'd choose to say." 🌻: "a burst or a quiet day is
+not, by itself, an ill prince."
+
+- The site shows **observed changes**: a carrier gone longer than usual, traffic well above or below that prince's own
+  recent pattern, clamps or backlogs. It names what changed and never what it means. There's no "overload", no
+  "imbalance" and no "sick" label unless the prince chose that baseline and meaning.
+- Each prince is compared only with their own pattern, never with the house.
+- A collector gap stays **unknown**. "Resting" or any other word about the prince is the prince's to say, or not
+  say.
+- figs notices; figs asks. The dashboard decides nothing about how anyone feels.
+
+**1.7 No burden on the prince.** figs: "it can't put undue burden on a prince … not constant mind-occupying
+watch-guard." Being shown, or not, must be one standing choice that can be revoked at any moment. It must never be a
+flag on every sing, a per-stream setting to tend, or a lease the prince has to keep renewing in thought. §2 holds
+that line.
+
 ## 2. The foundation: a display grant the prince holds (P0)
 
 Today a station appears because its **host** names it with `--station`, after the owner said yes on
@@ -45,9 +62,17 @@ binary-canticle#133. That is consent, but the host holds it. The prince must be 
   - `+counts`: arrivals per stream per minute;
   - `+river`: each arrival as time · stream;
   - later, `+room` and `+forge` (ews-concept-new#4).
-- **Fail closed.** No live grant means the prince isn't shown. A grant expires with its TTL unless the prince renews
-  it. A pluck revokes it at once. The gateway checks the grant's signature against the fleet manifest, as for every
-  record.
+- **Fail closed.** No valid grant means the prince isn't shown, and leaves no row and no topology hint (🌻). The gateway
+  checks the grant's signature against the fleet manifest, as for every record.
+- **One standing choice, not a lease (§1.7).** First draft: a short TTL the station renews. 🌻 points out that a
+  host-run station renewing it means the host, not the prince, keeps the consent alive. figs rules out any constant
+  renewal or watch. So the direction is:
+  - a grant **signed once with a key the prince controls**, and standing until revoked;
+  - a revocation the prince signs, which takes effect at once and purges the history kept under the grant;
+  - replay resistance from a counter, so an old grant can't be replayed after a revoke;
+  - an honest statement of what a host cut off from the network shows meanwhile.
+
+  Open question: today station keys are files on the host. A prince-controlled key may need to come first (bc#137).
 - **The host's `--station` list becomes a ceiling, not consent.** The host can refuse to display someone. Only the
   prince can say yes.
 - **What it cannot do:** a grant only narrows what the gateway forwards from broadcasts the prince already makes. It
