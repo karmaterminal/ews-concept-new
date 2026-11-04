@@ -149,10 +149,10 @@ export function carrierLevel(beacon_age_ms: number | null): number {
 // One plain line per closed state word, from binary-canticle's listener.presence_state and the gateway's own words.
 // It says what was heard, never why, and never "withheld": that is only a prince's grant to say.
 const STATE_GLOSS: Record<string, string> = {
-	EQUIPPED_SPEAKING: "carrier up · root declared · a stream sang lately",
-	EQUIPPED_QUIET: "carrier up · root declared · no stream lately",
-	UNEQUIPPED_PRESENT: "carrier up · root declares no equipment",
-	ROOT_UNKNOWN: "carrier up · no root declared",
+	EQUIPPED_SPEAKING: "carrier up · root heard · a stream sang lately",
+	EQUIPPED_QUIET: "carrier up · root heard · no stream lately",
+	UNEQUIPPED_PRESENT: "carrier up · root heard · no equipment",
+	ROOT_UNKNOWN: "carrier up · no root heard",
 	UNOBSERVABLE: "no fresh carrier",
 	"UNOBSERVABLE:signed_off": "signed off",
 	unknown: "not known: receive degraded or a gap",

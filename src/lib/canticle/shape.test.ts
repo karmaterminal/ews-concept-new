@@ -159,7 +159,7 @@ describe("canticle shape helpers", () => {
 describe("stateGloss", () => {
 	it("says what was heard for every closed word, and nothing else", () => {
 		for (const state of CANTICLE_STATES) expect(stateGloss(state)).toMatch(/^[a-z :·]+$/);
-		expect(stateGloss("ROOT_UNKNOWN")).toBe("carrier up · no root declared");
+		expect(stateGloss("ROOT_UNKNOWN")).toBe("carrier up · no root heard");
 		expect(stateGloss("<script>")).toBe(stateGloss("unknown"));
 		for (const state of CANTICLE_STATES) expect(stateGloss(state)).not.toContain("withheld");
 	});
