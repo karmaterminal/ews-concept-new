@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onDestroy, onMount } from "svelte";
 	import { page } from "$app/stores";
 	import { createPoller } from "$lib/canticle/poller";
 	import {
@@ -11,11 +10,9 @@
 	} from "$lib/canticle/house";
 
 	let house = $state<House>(sanitizeHouse(null));
-	let poll: ReturnType<typeof setInterval> | undefined;
 	// time since the last answer arrived, so pulses move between polls; it never invents an arrival
 	let receivedAt = 0;
 	let elapsed = $state(0);
-	let frame: ReturnType<typeof setInterval> | undefined;
 	const isDemo = $derived($page.url.searchParams.get("demo") === "1");
 
 	// phone first (frond-house §4): one small viewBox that scales to 412 px without shrinking text to nothing
@@ -24,23 +21,45 @@
 	const ringHeight = 400;
 	const hexRadius = 22;
 
-	const poller = createPoller<House>({
-		fetch: (url, init) => fetch(url, init),
-		url: () => {
-			const blind = $page.url.searchParams.get("blind") === "1";
-			return blind
-				? "/api/canticle-house?demo=1&blind=1"
-				: "/api/canticle-house?demo=1";
-		},
-		onValue: (next) => {
-			house = next;
-			receivedAt = Date.now();
+	const isBlind = $derived($page.url.searchParams.get("blind") === "1");
+
+	// One poller per demo view, keyed on the current query, not on the first mount: a client-side move to ?demo=1
+	// starts it, and leaving (a link, Back, or a change of ?blind) stops it and resets to the empty house (🌫 on #9).
+	function startDemo(blind: boolean): () => void {
+		const poller = createPoller<House>({
+			fetch: (url, init) => fetch(url, init),
+			url: () => blind ? "/api/canticle-house?demo=1&blind=1" : "/api/canticle-house?demo=1",
+			onValue: (next) => {
+				house = next;
+				receivedAt = Date.now();
+				elapsed = 0;
+			},
+			sanitize: sanitizeHouse,
+			empty: sanitizeHouse(null),
+			isCurrent: (next) => next.connected,
+			maxAgeMs: 25000,
+		});
+		poller.tick();
+		const poll = setInterval(poller.tick, 10000);
+		const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+		const frame = still ? undefined : setInterval(() => { if (receivedAt) elapsed = Date.now() - receivedAt; }, 100);
+		return () => {
+			poller.stop();
+			clearInterval(poll);
+			if (frame) clearInterval(frame);
+		};
+	}
+
+	$effect(() => {
+		// no live house exists yet: without ?demo=1 nothing is polled at all
+		if (!isDemo) return;
+		const stop = startDemo(isBlind);
+		return () => {
+			stop();
+			house = sanitizeHouse(null);
+			receivedAt = 0;
 			elapsed = 0;
-		},
-		sanitize: sanitizeHouse,
-		empty: sanitizeHouse(null),
-		isCurrent: (next) => next.connected,
-		maxAgeMs: 25000,
+		};
 	});
 
 	function hostPoint(index: number): { x: number; y: number } {
@@ -80,20 +99,6 @@
 		}).join(" ");
 	}
 
-	onMount(() => {
-		// no live house exists yet: without ?demo=1 nothing is polled at all
-		if (!isDemo) return;
-		poller.tick();
-		poll = setInterval(poller.tick, 10000);
-		const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-		if (!still) frame = setInterval(() => { if (receivedAt) elapsed = Date.now() - receivedAt; }, 100);
-	});
-
-	onDestroy(() => {
-		poller.stop();
-		if (poll) clearInterval(poll);
-		if (frame) clearInterval(frame);
-	});
 </script>
 
 <main class="house-page">
