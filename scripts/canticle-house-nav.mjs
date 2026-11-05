@@ -2,7 +2,7 @@
 // Run against a served build:  node scripts/canticle-house-nav.mjs [base-url] [chromium]
 //   default base http://127.0.0.1:4199, chromium /usr/bin/chromium. Exits 1 on any failed expectation.
 // Steps: land without ?demo=1 (nothing polled), OPEN DEMO (six hosts), Back (polling stops),
-// Forward (six hosts again), and the HOUSE link on /canticle.
+// Forward (six hosts again), the HOUSE link on /canticle, and a full load of ?demo=1 followed by Back.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,6 +36,12 @@ out.forward_3s = { ...(await ev(state)), requests };
 await send("Page.navigate", { url: `${base}/canticle` }); await sleep(3000);
 await ev(`[...document.querySelectorAll("a")].find(a => a.textContent.includes("HOUSE")).click()`); await sleep(3000);
 out.from_main_link = await ev(state);
+// a full load of ?demo=1, then Back: a cross-document traversal, so it reloads the non-demo page (a control, not 🌫's leak)
+await send("Page.navigate", { url: `${base}/canticle/house` }); await sleep(2000);
+await send("Page.navigate", { url: `${base}/canticle/house?demo=1` }); await sleep(3000);
+const fullLoaded = await ev(state);
+await ev(`history.back()`); await sleep(1500); const atFullBack = requests; await sleep(12000);
+out.full_load_then_back_12s = { loaded_hosts: fullLoaded.hosts, ...(await ev(state)), requests_since_back: requests - atFullBack };
 console.log(JSON.stringify(out, null, 1));
 ws.close(); chrome.kill();
 const failures = [];
@@ -43,6 +49,7 @@ if (out.land.requests !== 0 || !out.land.panel) failures.push("landing polled or
 if (out.open_demo_11s.hosts !== 6 || out.open_demo_11s.requests < 1) failures.push("OPEN DEMO did not start polling");
 if (out.back_12s.requests_since_back !== 0 || !out.back_12s.panel || out.back_12s.hosts !== 0) failures.push("Back left demo polling running or hosts drawn");
 if (out.forward_3s.hosts !== 6) failures.push("Forward did not restart the demo");
+if (out.full_load_then_back_12s.loaded_hosts !== 6 || out.full_load_then_back_12s.requests_since_back !== 0 || !out.full_load_then_back_12s.panel) failures.push("after a full demo load, Back left polling running");
 if (out.from_main_link.hosts !== 6) failures.push("the HOUSE link on /canticle did not start the demo");
 if (failures.length) { console.error("FAIL: " + failures.join("; ")); process.exit(1); }
 console.log("OK");
