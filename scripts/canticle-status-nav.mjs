@@ -1,5 +1,6 @@
 // Navigation regression for /canticle/status (demo data): board → click a bar (SYNCHRONIZING) → detail → pick a stream
-// hex → the pick survives a poll → Back to the board → the detail's pollers stopped.
+// hex → the pick survives a poll → Back to the board → the detail's pollers stopped; Back during SYNCHRONIZING cancels the
+// open; a ?stream= the station doesn't carry is said, not drawn.
 // Run against a served build:  node scripts/canticle-status-nav.mjs [base-url] [chromium]. Exits 1 on any failed step.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,6 +34,15 @@ await ev(`history.back()`); await sleep(2500);
 out.back = await ev(`({path: location.pathname + location.search, bars: document.querySelectorAll(".station-bar").length})`);
 await sleep(3000);
 out.detail_requests_after_back = reqs.slice(before).filter((u) => u.includes("drum") || u.includes("flow")).length;
+// 🌿 on #10: Back during the SYNCHRONIZING pause must cancel the pending open
+await send("Page.navigate", { url: `${base}/canticle?demo=1` }); await sleep(2500);
+await ev(`[...document.querySelectorAll("a")].find(a => a.textContent.trim() === "STATUS").click()`); await sleep(2500);
+await ev(`document.querySelector(".station-bar").click()`); await sleep(200);
+await ev(`history.back()`); await sleep(1800);
+out.back_during_sync = await ev(`location.pathname + location.search`);
+// 🌿 on #10: a stream the station doesn't carry is said so, not drawn flat
+await send("Page.navigate", { url: `${base}/canticle/status/demo-melchior?demo=1&stream=nope` }); await sleep(3500);
+out.missing_stream = await ev(`({said: !!document.querySelector(".stream-missing"), lines: document.querySelectorAll(".waveform-panel polyline").length})`);
 console.log(JSON.stringify(out, null, 1)); ws.close(); chrome.kill();
 const failures = [];
 if (out.board.bars !== 3 || out.board.up !== 2) failures.push("the demo board is not 3 bars with 2 up");
@@ -42,5 +52,7 @@ if (!out.stream.search.includes("stream=") || out.stream.wave === "ARRIVALS // A
 if (out.stream_after_poll.wave !== out.stream.wave) failures.push("a poll reverted the stream pick");
 if (out.back.path !== "/canticle/status?demo=1" || out.back.bars !== 3) failures.push("Back did not return to the board");
 if (out.detail_requests_after_back !== 0) failures.push("the detail kept polling after Back");
+if (out.back_during_sync !== "/canticle?demo=1") failures.push("Back during SYNCHRONIZING still opened the detail (" + out.back_during_sync + ")");
+if (!out.missing_stream.said || out.missing_stream.lines !== 0) failures.push("a stream the station doesn't carry was drawn, not said");
 if (failures.length) { console.error("FAIL: " + failures.join("; ")); process.exit(1); }
 console.log("OK");
