@@ -114,7 +114,9 @@
 	$effect(() => {
 		void stationName;
 		const demo = isDemo;
-		const streamParam = untrack(() => $page.url.searchParams.get("stream"));
+		// seed from the real address, not $page.url: a stream pick is a shallow replaceState that SvelteKit's copy of the
+		// URL never sees, so after Back→Forward $page.url lacks ?stream= while the address bar has it (🌫 on #10)
+		const streamParam = untrack(() => new URL(window.location.href).searchParams.get("stream"));
 		selectedStream = streamParam && CANTICLE_IDENTIFIER.test(streamParam) ? streamParam : null;
 		shape = sanitizeShape(null);
 		flow = sanitizeFlow(null);
