@@ -6,6 +6,7 @@
 	import {
 		carrierLevel,
 		sanitizeShape,
+		stateGloss,
 		stateTone,
 		type Shape,
 	} from "$lib/canticle/shape";
@@ -104,6 +105,7 @@
 							></div>
 							<div class="station-name">{station.name}</div>
 							<div class="state-word">{station.state}</div>
+							<div class="state-gloss">{stateGloss(station.state)}</div>
 							<div class="beacon">
 								<span>BEACON</span>
 								<strong>{seconds(station.beacon_age_ms)}</strong>
@@ -321,6 +323,16 @@
 		max-width: 100%;
 		font-size: clamp(12px, 1.4vw, 16px);
 		font-weight: 900;
+		overflow-wrap: anywhere;
+	}
+
+	.state-gloss {
+		position: relative;
+		margin-top: 2px;
+		max-width: 100%;
+		font-size: 8px;
+		color: rgba(255, 255, 255, 0.62);
+		letter-spacing: 0.02em;
 		overflow-wrap: anywhere;
 	}
 
