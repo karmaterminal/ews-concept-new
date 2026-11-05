@@ -1,6 +1,6 @@
 // Navigation regression for /canticle/status (demo data): board → click a bar (SYNCHRONIZING) → detail → pick a stream
 // hex → the pick survives a poll → Back to the board → the detail's pollers stopped; Back during SYNCHRONIZING cancels the
-// open; a ?stream= the station doesn't carry is said, not drawn.
+// open; Forward restores the picked stream; a ?stream= the station doesn't carry is said, not drawn.
 // Run against a served build:  node scripts/canticle-status-nav.mjs [base-url] [chromium]. Exits 1 on any failed step.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,6 +34,11 @@ await ev(`history.back()`); await sleep(2500);
 out.back = await ev(`({path: location.pathname + location.search, bars: document.querySelectorAll(".station-bar").length})`);
 await sleep(3000);
 out.detail_requests_after_back = reqs.slice(before).filter((u) => u.includes("drum") || u.includes("flow")).length;
+// 🌫 on #10: Forward back onto the detail restores the picked stream from the address, not ALL
+await ev(`history.forward()`); await sleep(2500);
+out.forward = await ev(`({search: location.search, wave: document.querySelector(".waveform-title")?.textContent, active: document.querySelector(".hex-picker button.active")?.textContent.trim()})`);
+await sleep(11000);
+out.forward_after_poll = await ev(`({wave: document.querySelector(".waveform-title")?.textContent, active: document.querySelector(".hex-picker button.active")?.textContent.trim()})`);
 // 🌿 on #10: Back during the SYNCHRONIZING pause must cancel the pending open
 await send("Page.navigate", { url: `${base}/canticle?demo=1` }); await sleep(2500);
 await ev(`[...document.querySelectorAll("a")].find(a => a.textContent.trim() === "STATUS").click()`); await sleep(2500);
@@ -52,6 +57,8 @@ if (!out.stream.search.includes("stream=") || out.stream.wave === "ARRIVALS // A
 if (out.stream_after_poll.wave !== out.stream.wave) failures.push("a poll reverted the stream pick");
 if (out.back.path !== "/canticle/status?demo=1" || out.back.bars !== 3) failures.push("Back did not return to the board");
 if (out.detail_requests_after_back !== 0) failures.push("the detail kept polling after Back");
+if (!out.forward.search.includes("stream=") || out.forward.wave !== out.stream.wave || out.forward.active === "ALL") failures.push("Forward lost the picked stream (" + out.forward.wave + ")");
+if (out.forward_after_poll.wave !== out.stream.wave) failures.push("after Forward, a poll reverted the pick");
 if (out.back_during_sync !== "/canticle?demo=1") failures.push("Back during SYNCHRONIZING still opened the detail (" + out.back_during_sync + ")");
 if (!out.missing_stream.said || out.missing_stream.lines !== 0) failures.push("a stream the station doesn't carry was drawn, not said");
 if (failures.length) { console.error("FAIL: " + failures.join("; ")); process.exit(1); }
