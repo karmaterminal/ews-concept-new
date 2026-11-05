@@ -1,6 +1,6 @@
 // Navigation regression for /canticle/status (demo data): board → click a bar (SYNCHRONIZING) → detail → pick a stream
 // hex → the pick survives a poll → Back to the board → the detail's pollers stopped; Back during SYNCHRONIZING cancels the
-// open; Forward restores the picked stream; a ?stream= the station doesn't carry is said, not drawn.
+// open; Forward restores the picked stream; a query-only link on the same station resyncs it; a ?stream= the station doesn't carry is said, not drawn.
 // Run against a served build:  node scripts/canticle-status-nav.mjs [base-url] [chromium]. Exits 1 on any failed step.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,6 +39,16 @@ await ev(`history.forward()`); await sleep(2500);
 out.forward = await ev(`({search: location.search, wave: document.querySelector(".waveform-title")?.textContent, active: document.querySelector(".hex-picker button.active")?.textContent.trim()})`);
 await sleep(11000);
 out.forward_after_poll = await ev(`({wave: document.querySelector(".waveform-title")?.textContent, active: document.querySelector(".hex-picker button.active")?.textContent.trim()})`);
+// 🌫 on #10: query-only navigation on the same station (an ordinary link) resyncs the pick, and so do Back/Forward over it
+const link = (href) => ev(`(() => { const a = document.createElement("a"); a.href = ${JSON.stringify(href)}; a.textContent = "x"; document.body.append(a); a.click(); a.remove(); return true; })()`);
+const wave = () => ev(`document.querySelector(".waveform-title")?.textContent`);
+await send("Page.navigate", { url: `${base}/canticle/status/demo-melchior?demo=1` }); await sleep(3000);
+out.query = { start: await wave() };
+await link("/canticle/status/demo-melchior?demo=1&stream=chatter"); await sleep(1500); out.query.to_chatter = await wave();
+await link("/canticle/status/demo-melchior?demo=1"); await sleep(1500); out.query.to_all = await wave();
+await ev(`history.back()`); await sleep(1500); out.query.back = await wave();
+await ev(`history.forward()`); await sleep(1500); out.query.forward = await wave();
+await sleep(11000); out.query.after_poll = await wave();
 // 🌿 on #10: Back during the SYNCHRONIZING pause must cancel the pending open
 await send("Page.navigate", { url: `${base}/canticle?demo=1` }); await sleep(2500);
 await ev(`[...document.querySelectorAll("a")].find(a => a.textContent.trim() === "STATUS").click()`); await sleep(2500);
@@ -59,6 +69,7 @@ if (out.back.path !== "/canticle/status?demo=1" || out.back.bars !== 3) failures
 if (out.detail_requests_after_back !== 0) failures.push("the detail kept polling after Back");
 if (!out.forward.search.includes("stream=") || out.forward.wave !== out.stream.wave || out.forward.active === "ALL") failures.push("Forward lost the picked stream (" + out.forward.wave + ")");
 if (out.forward_after_poll.wave !== out.stream.wave) failures.push("after Forward, a poll reverted the pick");
+if (out.query.start !== "ARRIVALS // ALL" || out.query.to_chatter !== "ARRIVALS // chatter" || out.query.to_all !== "ARRIVALS // ALL" || out.query.back !== "ARRIVALS // chatter" || out.query.forward !== "ARRIVALS // ALL" || out.query.after_poll !== "ARRIVALS // ALL") failures.push("query-only navigation did not resync the pick (" + JSON.stringify(out.query) + ")");
 if (out.back_during_sync !== "/canticle?demo=1") failures.push("Back during SYNCHRONIZING still opened the detail (" + out.back_during_sync + ")");
 if (!out.missing_stream.said || out.missing_stream.lines !== 0) failures.push("a stream the station doesn't carry was drawn, not said");
 if (failures.length) { console.error("FAIL: " + failures.join("; ")); process.exit(1); }
