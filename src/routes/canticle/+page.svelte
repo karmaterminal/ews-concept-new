@@ -69,6 +69,7 @@
 		<div class="title">CANTICLE // CARRIER SHAPE</div>
 		<div class="statuses">
 			<a class="helicorder-link" href={`/canticle/helicorder${$page.url.searchParams.get("demo") === "1" ? "?demo=1" : ""}`}>HELICORDER</a>
+			<a class="helicorder-link" href="/canticle/house?demo=1">HOUSE (DEMO)</a>
 			<span>daemon <b>{shape.daemon}</b></span>
 			<span>receive <b>{shape.receive}</b></span>
 			<span class:linked={shape.connected} class="link">
