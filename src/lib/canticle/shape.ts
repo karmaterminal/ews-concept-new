@@ -160,7 +160,7 @@ const STATE_GLOSS: Record<string, string> = {
 };
 
 export function stateGloss(state: string): string {
-	return STATE_GLOSS[state] ?? STATE_GLOSS.unknown;
+	return Object.hasOwn(STATE_GLOSS, state) ? STATE_GLOSS[state] : STATE_GLOSS.unknown;
 }
 
 export function stateTone(state: string): "speaking" | "quiet" | "present" | "dark" {
