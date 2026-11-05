@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from "svelte";
 	import { page } from "$app/stores";
-	import { replaceState } from "$app/navigation";
+	import { afterNavigate, replaceState } from "$app/navigation";
 	import StripeBar from "$lib/components/StripeBar.svelte";
 	import {
 		CANTICLE_IDENTIFIER,
@@ -103,6 +103,17 @@
 		return runs;
 	}
 
+	function streamFromAddress(): string | null {
+		const value = new URL(window.location.href).searchParams.get("stream");
+		return value && CANTICLE_IDENTIFIER.test(value) ? value : null;
+	}
+
+	// every navigation (a link, Back, Forward, a query-only change on the same station) resyncs the pick from the
+	// address actually shown; this is separate from the polling effect, which is keyed on station and demo (🌫 on #10)
+	afterNavigate(() => {
+		selectedStream = streamFromAddress();
+	});
+
 	function selectStream(stream: string | null): void {
 		const url = new URL(window.location.href);
 		if (stream === null) url.searchParams.delete("stream");
@@ -116,8 +127,7 @@
 		const demo = isDemo;
 		// seed from the real address, not $page.url: a stream pick is a shallow replaceState that SvelteKit's copy of the
 		// URL never sees, so after Back→Forward $page.url lacks ?stream= while the address bar has it (🌫 on #10)
-		const streamParam = untrack(() => new URL(window.location.href).searchParams.get("stream"));
-		selectedStream = streamParam && CANTICLE_IDENTIFIER.test(streamParam) ? streamParam : null;
+		selectedStream = untrack(streamFromAddress);
 		shape = sanitizeShape(null);
 		flow = sanitizeFlow(null);
 		drum = sanitizeDrum(null);
