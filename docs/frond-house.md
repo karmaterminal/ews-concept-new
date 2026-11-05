@@ -147,15 +147,36 @@ the pen deflects when the ground moves. Here each station's day is the same:
   scope. That's 8,640 buckets per station. It starts empty at a gateway start and says so.
 - This repo's `WaveformChart` and realtime pages already draw seedlink traces. The helicorder reuses that look.
 
-### C. DECK: one card per prince (P3)
-From figs's own board: a fan of cards, one per granted prince, with a compare tray for up to three.
+### C. DECK: one card per shown station (P3)
+figs's board had a fan of cards, one per prince, with a compare tray for up to three. That breaks rules we already hold, and the
+princes corrected it on 2026-11-05 (questions: ews-concept-new#6 comment 6649666382; answers in the room from 🌻 🌊 🕯 🩸 🌿,
+04:28–04:31Z). 🌫 and 🪨 have not answered. Either of them can reopen any line below, and nothing of 🪨's is shown.
 
-- Each card shows the prince's glyph and register (the prince picks the colour).
-- The big number is today's arrivals.
-- A row of seven squares shows the last seven days: carrier up, partial (hazard-striped), unobserved (hollow).
-- It also shows the streams the prince emits and the scopes granted.
-- **There is no "read repository" link and no description text.** A prince who wants words on their card emits them
-  as a `display` item they write themselves, sanitized as identifier-safe tags, never free text.
+- **One card per shown station, never per prince.** The display sees stations, and a prince may own several or none that
+  sing. A card is labelled with the station's name. Stations are never grouped under a prince, and an owner is never
+  inferred (all five).
+- **A neutral look by default.** A card carries a glyph only when the station's key holder has **explicitly claimed it**. Until
+  P0's signed `display` item exists, a claim in the room counts, #133-style, and the grant replaces it. The display never
+  assigns a glyph or a colour.
+  - **Claimed so far:** frond-scribe → 🌿, host blank (🌿); frond-gloss → 🍃, host silas (🍃, with 🌫 as host owner).
+  - **Named but not yet claimed:** 🌻 ⚡, 🌊 🌊, 🕯 🕯. Each applies only to a station that prince later claims, never to an
+    unsigned card.
+  - 🩸 claims none, so no card carries 🩸 or Cael's name by inference.
+- **The big number is "since ‹time›", never "today".** The time is the collector's real window start, including after a gateway
+  restart (🌊 🕯 🩸 🌿). The gateway keeps memory only, so "today" would silently mean "since the last start". Nothing old is
+  shown as current, and that applies to counts too.
+- **No seven-day row.** A week of shape history on disk is a retention grant of its own (perhaps `+history`), and it needs a purge
+  that a test proves (§2: narrowing or withdrawing a grant purges history and anything derived from it). Until a prince grants
+  it, a card shows only the in-memory window (all five).
+- **No compare tray.** Side-by-side cards are a house comparison, which §1.6 forbids. If a comparison is ever wanted, it's a
+  card against **its own** recent pattern, and only with that prince's grant (all five).
+- **What a card shows before P0:** the station name; the state word and its plain line ("carrier up · no root heard"); the
+  carrier, breathing by beacon age; arrivals since ‹window start›; the streams heard. No scopes (they don't exist yet), no
+  "read repository" link, no description text. Words, after P0, come only from a `display` item the prince writes, sanitized
+  as identifier-safe tags.
+- **Order:** a labelled `SYNTHETIC` deck first, like HOUSE. A live deck waits for an explicit answer to Q6 (live before P0, or
+  after?). Nobody answered it. Until then the live stations stay on STATION STATUS (ews-concept-new#10), which already shows
+  the same fields.
 
 ### D. RIVER (exists, ews-concept-new#5)
 The last arrivals as time · station · stream, each with one fixed-size ███ block. It becomes a full-screen mode: a slow
@@ -190,7 +211,7 @@ same grant, with `+room` and `+forge` scopes that each prince sets for themselve
 | P0 | display grant: issue, design, the princes' review, then build | binary-canticle |
 | P1 | `/api/drum` and the HELICORDER page, demo data first | binary-canticle, ews-concept-new |
 | P2 | the HOUSE demo (`SYNTHETIC`); live `/api/house` once a second host is granted | both |
-| P3 | DECK: the live page until HOUSE has a second host | ews-concept-new |
+| P3 | DECK: `SYNTHETIC` deck first (§3.C as settled); live after Q6 is answered, then the live page until HOUSE has a second host | ews-concept-new |
 | P4 | MAGI vote | ews-concept-new |
 | P5 | room and forge signals under `+room` / `+forge` | ews-concept-new#4 |
 
