@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
+	import { beforeNavigate, goto } from "$app/navigation";
 	import StripeBar from "$lib/components/StripeBar.svelte";
 	import RibCageLayout from "$lib/components/RibCageLayout.svelte";
 	import { carrierLevel, sanitizeShape, stateGloss, type Shape } from "$lib/canticle/shape";
@@ -16,13 +16,27 @@
 		return ms === null ? "—" : `${(ms / 1000).toFixed(1)} s`;
 	}
 
-	async function openStation(name: string): Promise<void> {
-		loadingStation = name;
-		await new Promise((resolve) => setTimeout(resolve, 700));
-		const demo = $page.url.searchParams.get("demo") === "1" ? "?demo=1" : "";
-		await goto(`/canticle/status/${encodeURIComponent(name)}${demo}`);
+	// the SYNCHRONIZING pause before the detail page; any other navigation in the meantime (Back, a link) cancels it,
+	// so it never drags the reader somewhere they already left (🌿 on #10)
+	let pendingOpen: ReturnType<typeof setTimeout> | undefined;
+
+	function cancelOpen(): void {
+		if (pendingOpen) clearTimeout(pendingOpen);
+		pendingOpen = undefined;
 		loadingStation = null;
 	}
+
+	function openStation(name: string): void {
+		cancelOpen();
+		loadingStation = name;
+		const demo = $page.url.searchParams.get("demo") === "1" ? "?demo=1" : "";
+		pendingOpen = setTimeout(() => {
+			pendingOpen = undefined;
+			void goto(`/canticle/status/${encodeURIComponent(name)}${demo}`);
+		}, 700);
+	}
+
+	beforeNavigate(() => cancelOpen());
 
 	$effect(() => {
 		const demo = $page.url.searchParams.get("demo") === "1";
@@ -46,6 +60,7 @@
 		const timer = setInterval(poller.tick, 2000);
 
 		return () => {
+			cancelOpen();
 			clearInterval(timer);
 			poller.stop();
 			shape = sanitizeShape(null);

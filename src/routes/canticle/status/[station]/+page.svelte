@@ -20,6 +20,7 @@
 	let flow = $state<Flow>(sanitizeFlow(null));
 	let drum = $state<Drum>(sanitizeDrum(null));
 	let shapeLoaded = $state(false);
+	let drumLoaded = $state(false);
 
 	const stationName = $derived($page.params.station ?? "");
 	// the polling effect is keyed on these two values only: $page also emits on a shallow replaceState (a stream pick),
@@ -32,7 +33,9 @@
 	// would revert it (the helicorder picker's lesson). Seeded from ?stream= whenever the route changes.
 	let selectedStream = $state<string | null>(null);
 	const stationStreams = $derived(streamsFor(drum, stationName, station));
-	const segments = $derived(waveform(drum, stationName, selectedStream, 360));
+	// a ?stream= this station doesn't carry is said so, never drawn as a flat "quiet" trace (🌿 on #10)
+	const streamMissing = $derived(selectedStream !== null && drumLoaded && !stationStreams.includes(selectedStream));
+	const segments = $derived(streamMissing ? [] : waveform(drum, stationName, selectedStream, 360));
 	const logs = $derived(logFor(flow, stationName, selectedStream, 50));
 
 	const chartLeft = 58;
@@ -117,6 +120,7 @@
 		flow = sanitizeFlow(null);
 		drum = sanitizeDrum(null);
 		shapeLoaded = false;
+		drumLoaded = false;
 
 		const shapePoller = createShapePoller({
 			fetch: (url, init) => fetch(url, init),
@@ -140,6 +144,7 @@
 			url: () => demo ? "/api/canticle-drum?demo=1" : "/api/canticle-drum",
 			onValue: (next) => {
 				drum = next;
+				drumLoaded = true;
 			},
 			sanitize: sanitizeDrum,
 			empty: sanitizeDrum(null),
@@ -165,6 +170,7 @@
 			flow = sanitizeFlow(null);
 			drum = sanitizeDrum(null);
 			shapeLoaded = false;
+			drumLoaded = false;
 		};
 	});
 </script>
@@ -241,6 +247,12 @@
 					{#if station}<span class="top-right">{station.name}</span>{/if}
 				</div>
 				<div class="waveform-title">ARRIVALS // {selectedStream ?? "ALL"}</div>
+				{#if streamMissing}
+					<div class="stream-missing">
+						stream not on this station
+						<button type="button" onclick={() => selectStream(null)}>SHOW ALL</button>
+					</div>
+				{/if}
 				<svg viewBox="0 0 760 280" role="img" aria-label="Arrival count waveform">
 					<defs>
 						<pattern id="detail-unobserved-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
@@ -450,6 +462,19 @@
 		width:56px;
 		background:repeating-linear-gradient(135deg, var(--orange) 0 10px, #050505 10px 20px);
 	}
+
+	.stream-missing {
+		margin:10px;
+		padding:12px;
+		border:1px dashed #666;
+		color:#aaa;
+		letter-spacing:.08em;
+		display:flex;
+		justify-content:space-between;
+		align-items:center;
+		gap:10px;
+	}
+	.stream-missing button { border:1px solid var(--orange); background:#090909; color:var(--orange); padding:4px 8px; }
 
 	.no-link-panel {
 		color:#999;
