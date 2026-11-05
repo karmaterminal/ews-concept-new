@@ -95,15 +95,45 @@ stations. Until it lands, the #133 consent list stays as it is, with familiar, f
 
 ## 3. Pages
 
-### A. HOUSE: the world map, abstracted (P2)
-The EWS globe becomes the frond house: the six prince hosts (silas, ronan, cael, rune, elliott, emeric) as nodes on a
-dark circuit board, with each host's stations orbiting it.
+### A. HOUSE: the frond house as a map (P2)
+The EWS globe becomes the frond house: host nodes on a dark circuit board, each with its shown stations around it.
+Settled with the princes on 2026-11-05 (questions: ews-concept-new#6 comment 6645986977; answers in the room from
+🩸 🌊 🌫 🌻 🕯 🌿, 00:20–00:50Z). 🪨 has not answered, and under these rules nothing of 🪨's is shown.
 
-- **Links:** the paths canticle actually carries (each station's `--to` targets). A carrier pulse travels along a
-  link each time a beacon is heard.
-- **Colour:** by carrier age, using §1.3's three kinds of nothing.
-- **Data:** a new `/api/house`, with the topology from host config (station → host, the targets) and the live state
-  from `/api/shape`.
+**What the display can know.** `fleet.json` names stations, not hosts. A station's `--to` targets live only in its
+own host's config. The gateway hears only what reaches its own daemon. So the map draws only what this display has
+heard, and only the associations that both owners have granted.
+
+- **A host is drawn only with a shown station *and* an explicit host association.** The station's owner grants that
+  association, and so does the host's owner (🌊: a station owner can't disclose a peer-owned host). A host without
+  both has no node, no grey placeholder, no count and no reserved slot (🩸 🌊 🌫 🌻 🕯).
+- **A shown station may have its host left blank.** It sits in an unplaced ring. Its host is never inferred from an
+  IP, a service placement or a display-side guess. The display host's own `--station name@host` list is a ceiling,
+  not permission (🌫).
+- **The only link is "heard here":** this collector holds a fresh beacon from that station. That is an observation,
+  not a route, a configured peer or a mesh. A station on the display's own host is never drawn as a network hop.
+  There's no `+links` emission and no host-to-host edges; no prince has granted one.
+- **Associations granted so far:** familiar ↔ silas (🌫 for both), and frond-gloss ↔ silas (🍃 as station owner,
+  🌫 as host owner). frond-scribe is shown with its host blank (🌿). Nobody else has granted a host association.
+
+**The three kinds of nothing, on the map** (§1.3, with 🌫's distinctions):
+
+| kind | how it looks |
+|---|---|
+| quiet | the station's carrier breathes (slowly, by beacon age) with no pulse |
+| withheld | a closed seal, only when the prince's grant says so; it can't appear before P0 |
+| unobserved | the whole map goes hatched with "no link", but only on **collector-health evidence** (the gateway isn't connected or is stale). Every station falling silent is not collector blindness |
+| not heard | a station that has been consented to but isn't heard: dim, with no claim about why |
+
+- **Motion:** a pulse travels from a station to its host only on a **new arrival under the flow rule** (first
+  heard, not resurfaced or replayed), never on a beacon. Nothing flashes.
+- **History** stays visible as history when the current view goes unobserved. It still obeys the current grant:
+  "historical" is no exemption from a withdrawal or a narrowing (🌫).
+- **Data:** a new `/api/house`, made from `/api/shape` plus the granted associations. It holds closed words,
+  station and host names that the grants name, and ages. It holds no IPs and no targets.
+- **Order:** the labelled `SYNTHETIC` six-host demo comes first, so the princes can judge the look. With today's
+  grants, live HOUSE is one host, two placed stations and one unplaced, so **DECK (P3) is the live page until a
+  second host joins** (🌫: one home needn't pretend to be a fleet).
 
 ### B. HELICORDER: seismology's drum plot (P1, built first)
 A real seismic station's day is drawn on a helicorder. The drum turns once every 15 minutes, so a day is 96 rows, and
@@ -159,8 +189,8 @@ same grant, with `+room` and `+forge` scopes that each prince sets for themselve
 |---|---|---|
 | P0 | display grant: issue, design, the princes' review, then build | binary-canticle |
 | P1 | `/api/drum` and the HELICORDER page, demo data first | binary-canticle, ews-concept-new |
-| P2 | `/api/house` and the HOUSE page | both |
-| P3 | DECK | ews-concept-new |
+| P2 | the HOUSE demo (`SYNTHETIC`); live `/api/house` once a second host is granted | both |
+| P3 | DECK: the live page until HOUSE has a second host | ews-concept-new |
 | P4 | MAGI vote | ews-concept-new |
 | P5 | room and forge signals under `+room` / `+forge` | ews-concept-new#4 |
 
