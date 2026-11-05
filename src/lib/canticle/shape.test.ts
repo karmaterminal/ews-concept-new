@@ -161,6 +161,9 @@ describe("stateGloss", () => {
 		for (const state of CANTICLE_STATES) expect(stateGloss(state)).toMatch(/^[a-z :·]+$/);
 		expect(stateGloss("ROOT_UNKNOWN")).toBe("carrier up · no root heard");
 		expect(stateGloss("<script>")).toBe(stateGloss("unknown"));
+		for (const inherited of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+			expect(stateGloss(inherited)).toBe(stateGloss("unknown"));   // own keys only (🌫 on #8)
+		}
 		for (const state of CANTICLE_STATES) expect(stateGloss(state)).not.toContain("withheld");
 	});
 });

@@ -18,8 +18,11 @@
 	let frame: ReturnType<typeof setInterval> | undefined;
 	const isDemo = $derived($page.url.searchParams.get("demo") === "1");
 
-	const svgWidth = 760;
-	const svgHeight = 520;
+	// phone first (frond-house §4): one small viewBox that scales to 412 px without shrinking text to nothing
+	const svgWidth = 520;
+	const svgHeight = 490;
+	const ringHeight = 400;
+	const hexRadius = 22;
 
 	const poller = createPoller<House>({
 		fetch: (url, init) => fetch(url, init),
@@ -41,20 +44,36 @@
 	});
 
 	function hostPoint(index: number): { x: number; y: number } {
-		return hostPositions(house.hosts.length, svgWidth, 390)[index] ?? { x: svgWidth / 2, y: 195 };
+		return hostPositions(house.hosts.length, svgWidth, ringHeight)[index] ?? { x: svgWidth / 2, y: ringHeight / 2 };
+	}
+
+	// the direction from the ring's centre out through a host: its stations sit outside it, its name inside
+	function outward(hostIndex: number): number {
+		const host = hostPoint(hostIndex);
+		return Math.atan2(host.y - ringHeight / 2, host.x - svgWidth / 2);
 	}
 
 	function stationPoint(hostIndex: number, stationIndex: number, stationCount: number): { x: number; y: number } {
 		const host = hostPoint(hostIndex);
-		const angle = -Math.PI / 2 + (stationIndex / Math.max(1, stationCount)) * Math.PI * 2;
-		return { x: host.x + Math.cos(angle) * 58, y: host.y + Math.sin(angle) * 58 };
+		const angle = outward(hostIndex) + (stationIndex - (stationCount - 1) / 2) * 0.55;
+		return { x: host.x + Math.cos(angle) * 40, y: host.y + Math.sin(angle) * 40 };
+	}
+
+	// a label reads away from its point: left of it on the left side, right of it on the right
+	function anchorFor(angle: number): "start" | "middle" | "end" {
+		const c = Math.cos(angle);
+		return c < -0.35 ? "end" : c > 0.35 ? "start" : "middle";
+	}
+
+	function along(point: { x: number; y: number }, angle: number, distance: number): { x: number; y: number } {
+		return { x: point.x + Math.cos(angle) * distance, y: point.y + Math.sin(angle) * distance };
 	}
 
 	function unplacedPoint(index: number, count: number): { x: number; y: number } {
-		return { x: ((index + 1) / (count + 1)) * svgWidth, y: 466 };
+		return { x: ((index + 1) / (count + 1)) * svgWidth, y: 456 };
 	}
 
-	function hexPoints(cx: number, cy: number, radius = 34): string {
+	function hexPoints(cx: number, cy: number, radius = hexRadius): string {
 		return Array.from({ length: 6 }, (_, i) => {
 			const angle = -Math.PI / 2 + i * Math.PI / 3;
 			return `${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius}`;
@@ -107,6 +126,7 @@
 
 			{#each house.hosts as host, hostIndex}
 				{@const hostPos = hostPoint(hostIndex)}
+				{@const label = along(hostPos, outward(hostIndex) + Math.PI, hexRadius + 6)}
 				<g class="host-node" aria-label={`host ${host.name}`}>
 					<polygon
 						points={hexPoints(hostPos.x, hostPos.y)}
@@ -115,7 +135,7 @@
 						stroke-width="2"
 						vector-effect="non-scaling-stroke"
 					></polygon>
-					<text x={hostPos.x} y={hostPos.y + 3} text-anchor="middle" class="host-name">{host.name}</text>
+					<text x={label.x} y={label.y + 3} text-anchor={anchorFor(outward(hostIndex) + Math.PI)} class="host-name">{host.name}</text>
 				</g>
 
 				{#each host.stations as station, stationIndex}
@@ -148,7 +168,8 @@
 						<circle cx={stationPos.x} cy={stationPos.y} r="4" class="station-dot"></circle>
 					{/if}
 
-					<text x={stationPos.x} y={stationPos.y + 25} text-anchor="middle" class="station-name">{station.name}</text>
+					{@const stationLabel = along(stationPos, outward(hostIndex), 17)}
+					<text x={stationLabel.x} y={stationLabel.y + 3} text-anchor={anchorFor(outward(hostIndex))} class="station-name">{station.name}</text>
 
 					{#if look === "speaking"}
 						{#each pulses(station, elapsed) as progress}
@@ -164,8 +185,8 @@
 			{/each}
 
 			{#if house.unplaced.length > 0}
-				<line x1="250" y1="420" x2="510" y2="420" class="unplaced-rule"></line>
-				<text x="380" y="406" text-anchor="middle" class="unplaced-label">host not shown</text>
+				<line x1="150" y1="424" x2="370" y2="424" class="unplaced-rule"></line>
+				<text x="260" y="416" text-anchor="middle" class="unplaced-label">host not shown</text>
 				{#each house.unplaced as station, index}
 					{@const stationPos = unplacedPoint(index, house.unplaced.length)}
 					{@const look = stationLook(station, house.connected)}
@@ -381,7 +402,7 @@
 
 	.no-link {
 		fill: white;
-		font-size: 28px;
+		font-size: 22px;
 		font-weight: 900;
 		letter-spacing: .18em;
 	}
@@ -411,8 +432,6 @@
 		.grant-panel { margin-inline: 10px; }
 		.house-panel { width: calc(100% - 20px); }
 		.house-svg { min-height: 300px; }
-		.host-name { font-size: 8px; }
-		.station-name { font-size: 8px; }
 		.legend { margin-inline: 10px; }
 	}
 
