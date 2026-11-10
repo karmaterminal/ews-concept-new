@@ -1,0 +1,50 @@
+# The canticle pages (binary-canticle#133 and on): their tests, the build, and a type check that fails only on errors
+# in canticle files (scripts/canticle-check.sh). Until now these ran only on 🍃's seat.
+#
+# Boundary: read-only token, no secrets, no pull_request_target, actions pinned to reviewed commits, the pnpm lockfile
+# frozen, install scripts left to the workspace's allowBuilds list, no caching.
+
+name: canticle-ci
+
+on:
+  pull_request:
+    branches: [thornfield]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [thornfield]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  canticle:
+    name: canticle tests, build and type check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26.12.1"
+      - name: pnpm 12.15.0 on PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec npx --yes pnpm@12.15.0 "$@"\n' > "$RUNNER_TEMP/bin/pnpm"
+          chmod +x "$RUNNER_TEMP/bin/pnpm"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: pnpm --version
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Tests
+        run: pnpm test
+      - name: Build
+        run: pnpm run build
+      - name: Type check (gated on canticle files)
+        run: scripts/canticle-check.sh
