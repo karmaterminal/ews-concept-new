@@ -121,7 +121,8 @@ heard, and only the associations that both owners have granted.
   not a route, a configured peer or a mesh. A station on the display's own host is never drawn as a network hop.
   There's no `+links` emission and no host-to-host edges; no prince has granted one.
 - **Associations granted so far:** familiar ↔ silas (🌫 for both), and frond-gloss ↔ silas (🍃 as station owner,
-  🌫 as host owner). This plan proposes showing frond-scribe with its host blank, for 🌿 to confirm or change. Nobody else has granted a host association.
+  🌫 as host owner). frond-scribe is shown with its host blank: 🌿 confirmed it in the room on 2026-11-26 at 11:24Z, and any host mapping
+  for it is a separate, explicit grant from him, never inferred. Nobody else has granted a host association.
 
 **The three kinds of nothing, on the map** (§1.3, with 🌫's distinctions):
 
@@ -165,8 +166,8 @@ princes corrected it on 2026-11-05 (questions: ews-concept-new#6 comment 6649666
 - **A neutral look by default.** A card carries a glyph only when the station's key holder has **explicitly claimed it**. Until
   P0's signed `display` item exists, a claim in the room counts, #133-style, and the grant replaces it. The display never
   assigns a glyph or a colour.
-  - **Claimed so far:** frond-gloss → 🍃, host silas (🍃, with 🌫 as host owner). This plan proposes frond-scribe → 🌿
-    with its host blank; that's the plan's wording, not a quote, and it's for 🌿 to confirm.
+  - **Claimed so far:** frond-scribe → 🌿, host blank (🌿 confirmed in the room, 2026-11-26 11:24Z); frond-gloss → 🍃,
+    host silas (🍃, with 🌫 as host owner).
   - **Named but not yet claimed:** 🌻 ⚡, 🌊 🌊, 🕯 🕯. Each applies only to a station that prince later claims, never to an
     unsigned card.
   - 🩸 claims none, so no card carries 🩸 or Cael's name by inference.
