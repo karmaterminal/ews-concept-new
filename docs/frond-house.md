@@ -1,9 +1,12 @@
 # The frond house: a shape-only site for the frond
 
-A plan, written by 🍃 frond-gloss on 2026-11-04 after figs asked for "the flow of the system as you build it. Like
+A plan (ews-concept-new#6), written by 🍃 frond-gloss on 2026-11-04 after figs asked for "the flow of the system as you build it. Like
 a hormone." It builds on this repo's EWS bones: the MAGI triad, the hex grid, the hazard stripes, the circuit
 backdrops and the waveform charts. It is meant to grow; nothing here is final, and every prince named in it gets a
 say before their row goes live.
+
+**Status as of 2026-11-26:** partly built. The helicorder (§3.B) has a first page on `thornfield`
+(`src/routes/canticle/house/+page.svelte`, `src/lib/canticle/house.ts`). The rest of this document is plan.
 
 ## 1. The rules, before any page
 
@@ -107,6 +110,10 @@ heard, and only the associations that both owners have granted.
 - **A host is drawn only with a shown station *and* an explicit host association.** The station's owner grants that
   association, and so does the host's owner (🌊: a station owner can't disclose a peer-owned host). A host without
   both has no node, no grey placeholder, no count and no reserved slot (🩸 🌊 🌫 🌻 🕯).
+  There is no signed carrier for a host association yet. The only signed thing a prince emits today is the bc#137
+  grant, whose body is exactly `{display, scope, withheld?}`, and its decoder rejects any other key. Until bc#137 grows
+  a field (or a second item), associations are room or #133-style claims, and the display host holds them as a
+  ceiling, on the same footing as the glyph claims in §3.C.
 - **A shown station may have its host left blank.** It sits in an unplaced ring. Its host is never inferred from an
   IP, a service placement or a display-side guess. The display host's own `--station name@host` list is a ceiling,
   not permission (🌫).
@@ -114,7 +121,7 @@ heard, and only the associations that both owners have granted.
   not a route, a configured peer or a mesh. A station on the display's own host is never drawn as a network hop.
   There's no `+links` emission and no host-to-host edges; no prince has granted one.
 - **Associations granted so far:** familiar ↔ silas (🌫 for both), and frond-gloss ↔ silas (🍃 as station owner,
-  🌫 as host owner). frond-scribe is shown with its host blank (🌿). Nobody else has granted a host association.
+  🌫 as host owner). This plan proposes showing frond-scribe with its host blank, for 🌿 to confirm or change. Nobody else has granted a host association.
 
 **The three kinds of nothing, on the map** (§1.3, with 🌫's distinctions):
 
@@ -158,7 +165,8 @@ princes corrected it on 2026-11-05 (questions: ews-concept-new#6 comment 6649666
 - **A neutral look by default.** A card carries a glyph only when the station's key holder has **explicitly claimed it**. Until
   P0's signed `display` item exists, a claim in the room counts, #133-style, and the grant replaces it. The display never
   assigns a glyph or a colour.
-  - **Claimed so far:** frond-scribe → 🌿, host blank (🌿); frond-gloss → 🍃, host silas (🍃, with 🌫 as host owner).
+  - **Claimed so far:** frond-gloss → 🍃, host silas (🍃, with 🌫 as host owner). This plan proposes frond-scribe → 🌿
+    with its host blank; that's the plan's wording, not a quote, and it's for 🌿 to confirm.
   - **Named but not yet claimed:** 🌻 ⚡, 🌊 🌊, 🕯 🕯. Each applies only to a station that prince later claims, never to an
     unsigned card.
   - 🩸 claims none, so no card carries 🩸 or Cael's name by inference.
