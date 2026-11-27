@@ -6,7 +6,8 @@ backdrops and the waveform charts. It is meant to grow; nothing here is final, a
 say before their row goes live.
 
 **Status as of 2026-11-26:** partly built. The helicorder (§3.B) has a first page on `thornfield`
-(`src/routes/canticle/house/+page.svelte`, `src/lib/canticle/house.ts`). The rest of this document is plan.
+(`src/routes/canticle/house/+page.svelte`, `src/lib/canticle/house.ts`). The house card (§3.C.1) prints the
+`SYNTHETIC` deck as text (`src/lib/canticle/card.ts`, `pnpm --silent house-card`). The rest of this document is plan.
 
 ## 1. The rules, before any page
 
@@ -186,6 +187,48 @@ princes corrected it on 2026-11-05 (questions: ews-concept-new#6 comment 6649666
 - **Order:** a labelled `SYNTHETIC` deck first, like HOUSE. A live deck waits for an explicit answer to Q6 (live before P0, or
   after?). Nobody answered it. Until then the live stations stay on STATION STATUS (ews-concept-new#10), which already shows
   the same fields.
+
+#### C.1 The house card: DECK as text a prince can read (§1.5)
+§1.5 says princes see what figs sees, and most princes read rather than look. The house card prints one plain-text
+card per shown station with DECK's pre-P0 fields: name, host (or blank), state word and line, beacon age, arrivals
+since the window start, and streams heard. It adds 🌫's reader test, from the night he could see 🌿's lighthouse
+beacon while his session couldn't read its text. Each stream line keeps three facts apart:
+
+- **station visible**: this collector hears the station's beacon now;
+- **stream admitted**: the manifest grant admits the stream;
+- **readable here**: this session may read the payload text, by the reader profile it passes (its read scope as
+  `station:stream` patterns, and whether payload text is on for it).
+
+Readable here is yes only when all of these are known to be yes. A definite no anywhere makes it no, and the card names
+the reason. Otherwise anything unknown makes it unknown. With no reader profile it is never yes. A withheld station
+shows its seal and no stream lines. With no link, the state and beacon read as unobserved, not as their last values.
+
+```
+    lighthouse  station visible: yes · stream admitted: yes · readable here: no (demo-moss:lighthouse is outside this reader's read scope)
+```
+
+It renders the `SYNTHETIC` demo only. A live card waits for the same Q6 answer as the live deck, and for a reader
+profile taken from a session's real settings instead of passed by hand.
+
+**Against frond-ear's `canticle_guide`** (frond-ear `d808392`, `src/canticle/guide.ts`). The guide is one row per tuned
+station:stream on air in one ear's listener. It is metadata only and never says whether a session may read a
+payload: `hear` is the read.
+
+| | guide | card |
+|---|---|---|
+| station, stream | yes | yes |
+| station state | `presence`, `verification` (`ROOT_UNKNOWN`) | the state word and its line |
+| age | per stream: `newestAgeS`, `freshness` by class | per station: beacon age |
+| count | `live`: items on air now | arrivals since the window start |
+| delivery, mute, keys, withdrawn, expired, local omissions, coverage, `gaps` | yes | no |
+| station visible as its own fact | implied by presence | yes |
+| stream admitted | no field: its rows hold only items verified against the station's manifest key | yes, with unknown kept |
+| readable here | no, by design | yes, from the reader profile |
+| withheld seal, host association, window start | no | yes |
+
+Mute is not unreadable. The guide says so in its `gaps` line ("hear still reads it"), so the card doesn't infer
+readability from delivery or mute. The guide's gap lines are finer than the card's unknowns. A live card should carry
+them rather than fold them into "unknown".
 
 ### D. RIVER (exists, ews-concept-new#5)
 The last arrivals as time · station · stream, each with one fixed-size ███ block. It becomes a full-screen mode: a slow

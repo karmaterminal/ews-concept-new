@@ -9,13 +9,14 @@ import {
 	sanitizeReader,
 	streamReading,
 	type CardDeck,
+	type ReaderProfile,
 } from "./card";
 import { DEMO_HOUSE } from "./house";
 
 // A fixed instant, so every age and time on a card is the same on every run.
 const NOW = Date.UTC(2026, 10, 27, 9, 0, 0);
 
-function card(deck: CardDeck, name: string, reader = DEMO_READERS["demo-reader-full"]): string {
+function card(deck: CardDeck, name: string, reader: ReaderProfile | null = DEMO_READERS["demo-reader-full"]): string {
 	const station = deck.stations.find((item) => item.name === name);
 	if (!station) throw new Error(`no ${name} in the demo deck`);
 	return renderStationCard(station, deck, reader);
@@ -71,6 +72,15 @@ describe("a station not visible", () => {
 		expect(line).toContain("nothing from this station is heard here now");
 	});
 
+	it("is no when its last beacon is stale, even with a heard state word", () => {
+		const house = DEMO_HOUSE(NOW);
+		house.hosts[0].stations[0].beacon_age_ms = 45000;
+		const deck = deckFromHouse(house, { "demo-iris": [{ stream: "chatter", arrivals: 1, newest_age_ms: 45000, admitted: true }] }, NOW - 1000);
+		const text = card(deck, "demo-iris");
+		expect(text).toContain("station visible: no (its last beacon is stale)");
+		expect(streamLine(text, "chatter")).toContain("readable here: no");
+	});
+
 	it("is unknown, not no, when the collector itself has no link (§1.3 unobserved)", () => {
 		const deck = DEMO_DECK(NOW, { blind: true });
 		const text = card(deck, "demo-iris");
@@ -78,6 +88,10 @@ describe("a station not visible", () => {
 		expect(text).not.toContain("station visible: yes");
 		expect(text).not.toContain("station visible: no");
 		expect(streamLine(text, "chatter")).toContain("readable here: unknown");
+		// the last state word and beacon age aren't printed as current (§1.4)
+		expect(text).toContain("state      unobserved (the collector has no link)");
+		expect(text).toContain("beacon     unknown (no link)");
+		expect(text).not.toContain("EQUIPPED_SPEAKING");
 	});
 });
 
