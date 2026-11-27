@@ -62,14 +62,23 @@ describe("the lighthouse case: station visible, stream admitted, not readable he
 });
 
 describe("a station not visible", () => {
-	it("says its beacon is not heard, and nothing of it is readable here", () => {
+	it("says its beacon is not heard, and keeps the permission answer apart: readable when heard", () => {
 		const deck = DEMO_DECK(NOW);
 		const text = card(deck, "demo-balthasar");
 		expect(text).toContain("station visible: no");
 		expect(text).toContain("beacon     none heard");
 		const line = streamLine(text, "chatter");
-		expect(line).toContain("station visible: no · stream admitted: yes · readable here: no");
-		expect(line).toContain("nothing from this station is heard here now");
+		expect(line).toContain("station visible: no · stream admitted: yes · readable here: yes (when heard)");
+		expect(line).not.toContain("nothing from this station is heard here now");
+	});
+
+	it("when not visible and outside the reader's scope, says no with only the scope reason", () => {
+		const deck = DEMO_DECK(NOW);
+		const line = streamLine(card(deck, "demo-balthasar", DEMO_READERS["demo-reader-scoped"]), "chatter");
+		expect(line).toContain(
+			"station visible: no · stream admitted: yes · readable here: no (demo-balthasar:chatter is outside this reader's read scope)",
+		);
+		expect(line.endsWith("outside this reader's read scope)")).toBe(true);
 	});
 
 	it("is no when its last beacon is stale, even with a heard state word", () => {
@@ -78,7 +87,7 @@ describe("a station not visible", () => {
 		const deck = deckFromHouse(house, { "demo-iris": [{ stream: "chatter", arrivals: 1, newest_age_ms: 45000, admitted: true }] }, NOW - 1000);
 		const text = card(deck, "demo-iris");
 		expect(text).toContain("station visible: no (its last beacon is stale)");
-		expect(streamLine(text, "chatter")).toContain("readable here: no");
+		expect(streamLine(text, "chatter")).toContain("station visible: no · stream admitted: yes · readable here: yes (when heard)");
 	});
 
 	it("is unknown, not no, when the collector itself has no link (§1.3 unobserved)", () => {
@@ -87,7 +96,9 @@ describe("a station not visible", () => {
 		expect(text).toContain("station visible: unknown");
 		expect(text).not.toContain("station visible: yes");
 		expect(text).not.toContain("station visible: no");
-		expect(streamLine(text, "chatter")).toContain("readable here: unknown");
+		expect(streamLine(text, "chatter")).toContain("station visible: unknown · stream admitted: yes · readable here: yes (when heard)");
+		// without a reader profile, still unknown: no link never turns into a permission answer
+		expect(streamLine(renderStationCard(deck.stations[0], deck, null), "chatter")).toContain("readable here: unknown (no reader profile)");
 		// the last state word and beacon age aren't printed as current (§1.4)
 		expect(text).toContain("state      unobserved (the collector has no link)");
 		expect(text).toContain("beacon     unknown (no link)");
