@@ -31,6 +31,13 @@ export type CardStation = {
 	beacon_age_ms: number | null;
 	withheld: boolean;
 	streams: CardStream[];
+	/**
+	 * What the display knows about this station's streams: `complete` (the list is the whole list, possibly empty),
+	 * `unknown` (no stream knowledge at all), or `partial` (entries were left out: over the cap, or malformed).
+	 */
+	streams_known: "complete" | "unknown" | "partial";
+	/** Entries given for this station, before any were left out; null when unknown. */
+	streams_given: number | null;
 };
 
 export type CardDeck = {
@@ -59,11 +66,13 @@ function nonNegativeNumber(value: unknown): number | null {
 	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function sanitizeStreams(raw: unknown): CardStream[] {
-	if (!Array.isArray(raw)) return [];
+const MAX_CARD_STREAMS = 16;
+
+function sanitizeStreams(raw: unknown): CardStream[] | null {
+	if (!Array.isArray(raw)) return null;
 	const seen = new Set<string>();
 	const out: CardStream[] = [];
-	for (const item of raw.slice(0, 16)) {
+	for (const item of raw.slice(0, MAX_CARD_STREAMS)) {
 		if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
 		const source = item as Record<string, unknown>;
 		if (typeof source.stream !== "string" || !CANTICLE_IDENTIFIER.test(source.stream)) continue;
@@ -89,14 +98,14 @@ export function deckFromHouse(
 	streams: Record<string, unknown[]>,
 	window_start_ms: number | null,
 ): CardDeck {
-	const station = (item: HouseStation, host: string | null): CardStation => ({
-		name: item.name,
-		host,
-		state: item.state,
-		beacon_age_ms: item.beacon_age_ms,
-		withheld: item.withheld,
-		streams: item.withheld || !Object.hasOwn(streams, item.name) ? [] : sanitizeStreams(streams[item.name]),
-	});
+	const station = (item: HouseStation, host: string | null): CardStation => {
+		const base = { name: item.name, host, state: item.state, beacon_age_ms: item.beacon_age_ms, withheld: item.withheld };
+		const raw = item.withheld || !Object.hasOwn(streams, item.name) ? undefined : streams[item.name];
+		const kept = raw === undefined ? null : sanitizeStreams(raw);
+		if (kept === null) return { ...base, streams: [], streams_known: "unknown", streams_given: null };
+		const given = (raw as unknown[]).length;
+		return { ...base, streams: kept, streams_known: kept.length < given ? "partial" : "complete", streams_given: given };
+	};
 	return {
 		now_ms: house.now_ms,
 		synthetic: house.synthetic,
@@ -200,10 +209,23 @@ function age(ms: number | null): string {
 	return `${Math.floor(ms / 3600000)} h ago`;
 }
 
+function streamsLine(station: CardStation, heard: CardStream[]): string {
+	if (station.streams_known === "unknown") return "unknown (no stream knowledge for this station)";
+	const names = heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard";
+	if (station.streams_known !== "partial") return names;
+	const left = (station.streams_given ?? station.streams.length) - station.streams.length;
+	return `${names} (+${left} not shown)`;
+}
+
 function arrivalsLine(station: CardStation, deck: CardDeck): string {
 	if (deck.window_start_ms === null) return "unknown (no window start)";
+	if (station.streams_known === "unknown") return "unknown (no stream knowledge for this station)";
 	if (station.streams.some((item) => item.arrivals === null)) return "unknown";
 	const total = station.streams.reduce((sum, item) => sum + (item.arrivals ?? 0), 0);
+	if (station.streams_known === "partial") {
+		const given = station.streams_given ?? station.streams.length;
+		return `at least ${total} since ${iso(deck.window_start_ms)} (${given - station.streams.length} of ${given} stream entries not shown)`;
+	}
 	return `${total} since ${iso(deck.window_start_ms)}`;
 }
 
@@ -222,7 +244,7 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 			: "  state      unobserved (the collector has no link)",
 		`  beacon     ${deck.connected ? age(station.beacon_age_ms) : "unknown (no link)"}`,
 		`  arrivals   ${arrivalsLine(station, deck)}`,
-		`  streams    ${heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard"}`,
+		`  streams    ${streamsLine(station, heard)}`,
 		`  station visible: ${seen.visible} (${seen.why})`,
 	);
 	const width = Math.max(0, ...station.streams.map((item) => item.stream.length));

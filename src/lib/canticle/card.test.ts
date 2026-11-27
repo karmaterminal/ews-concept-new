@@ -203,3 +203,32 @@ describe("honesty: readable only on the reader profile's word, unknown stays unk
 		expect(out).not.toContain("bad\nstream");
 	});
 });
+
+describe("stream knowledge: unknown is not empty, and a partial list is not a total (🌻, #13 review)", () => {
+	const START = NOW - 3600000;
+	it("a station the display has no stream knowledge for prints unknown, never 0 or none heard", () => {
+		const deck = deckFromHouse(DEMO_HOUSE(NOW), {}, START);
+		const text = card(deck, "demo-moss");
+		expect(text).toContain("arrivals   unknown (no stream knowledge for this station)");
+		expect(text).toContain("streams    unknown (no stream knowledge for this station)");
+		expect(text).not.toMatch(/arrivals {3}0 /);
+	});
+	it("a known-empty stream list still prints 0 and none heard", () => {
+		const deck = deckFromHouse(DEMO_HOUSE(NOW), { "demo-moss": [] }, START);
+		const text = card(deck, "demo-moss");
+		expect(text).toMatch(/arrivals {3}0 since /);
+		expect(text).toContain("streams    none heard");
+	});
+	it("more entries than the card keeps prints at least, with how many were left out", () => {
+		const many = Array.from({ length: 17 }, (_, i) => ({ stream: `s${String(i).padStart(2, "0")}`, arrivals: 1, newest_age_ms: 1000, admitted: true }));
+		const deck = deckFromHouse(DEMO_HOUSE(NOW), { "demo-moss": many }, START);
+		const text = card(deck, "demo-moss");
+		expect(text).toMatch(/arrivals {3}at least 16 since .* \(1 of 17 stream entries not shown\)/);
+		expect(text).toContain("(+1 not shown)");
+		expect(text).not.toMatch(/arrivals {3}16 since/);
+	});
+	it("an entry dropped as malformed also makes the count partial", () => {
+		const deck = deckFromHouse(DEMO_HOUSE(NOW), { "demo-moss": [{ stream: "ok", arrivals: 2, newest_age_ms: 1, admitted: true }, { stream: "bad name!", arrivals: 5 }] }, START);
+		expect(card(deck, "demo-moss")).toMatch(/arrivals {3}at least 2 since .* \(1 of 2 stream entries not shown\)/);
+	});
+});
