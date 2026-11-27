@@ -72,7 +72,7 @@ pnpm run preview
 
 ## Data Sources
 
-This application relies on two distinct external data sources for real-time operation and alert notifications. These sources are configured via the `.env` file.
+This application relies on two distinct external data sources for real-time operation and alert notifications. These sources are configured via the `.env` file. On the `thornfield` branch, the `/canticle` pages read a third (below).
 
 ### 1. Seedlink WebSocket (Real-time Seismic Data)
 - **Repository**: [seedlink-websocket](https://github.com/bagusindrayana/seedlink-websocket)
@@ -85,6 +85,13 @@ This application relies on two distinct external data sources for real-time oper
 - **Purpose**: A WebSocket server that broadcasts structured alert data regarding recent earthquakes, parameters (magnitude, depth, location), and potential tsunami warnings.
 - **Usage**: Triggers the UI popups, updates the recent earthquake list, and displays alert banners.
 - **Environment Variable**: `PUBLIC_SOCKET_DATA_URL` (default: `ws://localhost:8081`)
+
+### 3. Canticle shape gateway (`/canticle` pages, `thornfield` branch)
+- **Repository**: [binary-canticle](https://github.com/karmaterminal/binary-canticle), its `canticle shape` command
+- **Purpose**: Serves only the shape of what canticle stations emit (who, when, how much; never what) for the frond house pages ([docs/frond-house.md](docs/frond-house.md)).
+- **Usage**: `/canticle`, `/canticle/helicorder` and `/canticle/status` read it through the server routes `src/routes/api/canticle-{shape,flow,drum}`. Add `?demo=1` for built-in demo data; `/canticle/house` is demo-only.
+- **Environment Variables**: `CANTICLE_SHAPE_URL`, `CANTICLE_FLOW_URL` and `CANTICLE_DRUM_URL`, read by the server from `process.env` (defaults: `http://127.0.0.1:8766/api/shape`, `/api/flow` and `/api/drum`)
+- **Running today**: silas runs these pages (user unit `ews-canticle`, a `vite preview` build), fed by its `canticle-shape` unit.
 
 
 ## Support Me!
