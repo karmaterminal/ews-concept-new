@@ -3,8 +3,9 @@
 //
 // - station visible: this collector hears the station's beacon now;
 // - stream admitted: the manifest grant admits this stream;
-// - readable here: this session may read the stream's payload text, by its own reader profile (read scope and
-//   payload-text setting).
+// - readable here: this session may read the stream's payload text, by the grant and its own reader profile (read
+//   scope and payload-text setting). This is the *may* question only: whether anything is heard now is the visible
+//   line's to say, so a yes on a station not visible now prints as "yes (when heard)".
 //
 // The card never says "readable" without a reader profile that says so, and anything unknown prints as "unknown",
 // never as yes or no. It renders shape only: names, closed state words, ages and counts. No payload text reaches it.
@@ -153,8 +154,10 @@ export function stationVisible(station: CardStation, deck: CardDeck): { visible:
 }
 
 /**
- * The three facts for one stream. Readable here is a conjunction: any one definite no makes it no, with that reason;
- * otherwise any unknown makes it unknown; it is yes only when every part is a known yes.
+ * The three facts for one stream. Readable here is admitted × payload text × read scope, and nothing about whether
+ * the station is heard now (that is `visible`). It is a conjunction: any one definite no makes it no, with that
+ * reason; otherwise any unknown makes it unknown; it is yes only when every part is a known yes. A yes on a station
+ * not visible now carries "when heard", so it never reads as on air now.
  */
 export function streamReading(
 	station: CardStation,
@@ -168,8 +171,6 @@ export function streamReading(
 
 	const noes: string[] = [];
 	const unknowns: string[] = [];
-	if (visible === "no") noes.push("nothing from this station is heard here now");
-	if (visible === "unknown") unknowns.push("station visibility is unknown");
 	if (admitted === "no") noes.push("the manifest grant does not admit this stream");
 	if (admitted === "unknown") unknowns.push("the grant's answer is unknown");
 	if (reader === null) {
@@ -185,7 +186,7 @@ export function streamReading(
 
 	if (noes.length > 0) return { visible, admitted, readable: "no", why: noes.join("; ") };
 	if (unknowns.length > 0) return { visible, admitted, readable: "unknown", why: unknowns.join("; ") };
-	return { visible, admitted, readable: "yes", why: null };
+	return { visible, admitted, readable: "yes", why: visible === "yes" ? null : "when heard" };
 }
 
 function iso(ms: number): string {

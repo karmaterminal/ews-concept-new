@@ -199,12 +199,17 @@ beacon while his session couldn't read its text. Each stream line keeps three fa
 - **readable here**: this session may read the payload text, by the reader profile it passes (its read scope as
   `station:stream` patterns, and whether payload text is on for it).
 
-Readable here is yes only when all of these are known to be yes. A definite no anywhere makes it no, and the card names
-the reason. Otherwise anything unknown makes it unknown. With no reader profile it is never yes. A withheld station
-shows its seal and no stream lines. With no link, the state and beacon read as unobserved, not as their last values.
+Readable here answers only the *may* question: the grant, the payload-text setting and the read scope. Whether
+anything is heard now is the visible line's answer, and it stays out of readable here, so a stale beacon or a lost link
+never hides the permission answer. Readable here is yes only when all three are known to be yes. A definite no makes it
+no, and the card names only the permission reasons. Otherwise anything unknown makes it unknown. With no reader profile
+it is never yes. A yes on a station that isn't visible now prints as "yes (when heard)", so it never reads as on air now.
+A withheld station shows its seal and no stream lines. With no link, the state and beacon read as unobserved, not as
+their last values.
 
 ```
     lighthouse  station visible: yes · stream admitted: yes · readable here: no (demo-moss:lighthouse is outside this reader's read scope)
+    chatter     station visible: no · stream admitted: yes · readable here: yes (when heard)
 ```
 
 It renders the `SYNTHETIC` demo only. A live card waits for the same Q6 answer as the live deck, and for a reader
