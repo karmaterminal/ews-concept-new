@@ -230,6 +230,19 @@ then reads unknown, never no. A denial known some other way (the grant, or paylo
 reader line says the scope is partial. Station names the export withheld are counted on the card, never
 shown. It is one ear reading its own view. The house page's live deck still waits for the Q6 answer.
 
+Each gap name gets one plain line on the card (`src/lib/canticle/gaps.ts`): what it means, and which way it pushes,
+always toward unknown or partial. A name the table doesn't hold is never printed and counts as unreadable. The table
+must stay frond-ear's own list. Offline, `gaps.test.ts` holds it to `fixtures/frond-ear-gap-names.json`, a copy taken
+at a recorded frond-ear commit. **Whenever frond-ear moves**, check the table against frond-ear itself:
+
+```
+pnpm --silent check-gap-names --frond-ear ~/path/to/frond-ear     # runs its `house-export --gap-names`
+pnpm --silent check-gap-names --from gap-names.json              # or reads that output, saved
+```
+
+It exits 1 and names each difference: a name missing from the card's table or the fixture, one frond-ear no longer
+emits, or one whose push class moved. Update `gaps.ts`, and refresh the fixture and its `commit` in the same change.
+
 **Against frond-ear's `canticle_guide`** (frond-ear `d808392`, `src/canticle/guide.ts`). The guide is one row per tuned
 station:stream on air in one ear's listener. It is metadata only and never says whether a session may read a
 payload: `hear` is the read.
