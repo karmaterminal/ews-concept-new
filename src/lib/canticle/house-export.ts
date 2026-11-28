@@ -15,10 +15,12 @@
 // - names the export withheld (identity-shaped) are counted on the card, never shown, and a reader scope it says is
 //   incomplete (`may_read_complete: false`, `may_read_withheld` patterns) stays partial, so a stream outside it reads
 //   unknown, never no. A scope without `may_read_complete: true` is partial too;
-// - the export's guide gaps are carried as names and counts; stations the card can't show are counted.
+// - the export's guide gaps are carried as names and counts, each with its plain line (./gaps); a name the card
+//   doesn't know is counted as unreadable, never printed; stations the card can't show are counted.
 // Only closed fields are copied, each checked; anything else in the document never reaches the card.
 import { CANTICLE_IDENTIFIER, CANTICLE_STATES } from "./shape";
 import { sanitizeReader, sanitizeStreams, type CardDeck, type CardStation, type ReaderProfile } from "./card";
+import { knownGap } from "./gaps";
 
 export const HOUSE_EXPORT_KIND = "frond-house-export/0";
 
@@ -31,34 +33,11 @@ const CARRIER_UP = new Set(["EQUIPPED_SPEAKING", "EQUIPPED_QUIET", "UNEQUIPPED_P
 const MAX_STATIONS = 64;
 /** Station entries judged at all; past this, every one counts as not shown. */
 const MAX_ENTRIES = 4096;
-/** The producer's own gap tags (frond-ear house-cli.ts): no other name prints (🌫's nit). */
-const GAP_TAGS = new Set([
-	"ended",
-	"not_listening",
-	"blind",
-	"joined_late",
-	"host_mute",
-	"records_lost",
-	"awaiting_landing",
-	"ear_muted",
-	"omitted_other_tuned",
-	"omitted_untuned",
-	"coverage_unknown",
-	"unrecognized_gap",
-	"row_local_omissions",
-	"row_coverage_unknown",
-	"row_unparsed",
-	"changed_mid_walk",
-	"page_unparsed",
-	"page_refused",
-	"row_count_mismatch",
-	"duplicate_row",
-	"untuned_count_mismatch",
-	"untuned_unlisted",
-	"untuned_partial_source",
-	"unrecognized_word",
-]);
-const MAX_GAPS = 32;
+/**
+ * The producer's own gap names (frond-ear house-cli.ts) are the card's gap table (./gaps): no other name prints
+ * (🌫's nit). Room for every name it can emit; past this, an entry counts as unreadable.
+ */
+const MAX_GAPS = 64;
 
 export type LiveCard = { deck: CardDeck; reader: ReaderProfile | null; source: string };
 
@@ -172,7 +151,7 @@ function coverageOf(deck: Record<string, unknown>): CardDeck["coverage"] {
 		if (
 			entry === null ||
 			typeof entry.name !== "string" ||
-			!GAP_TAGS.has(entry.name) ||
+			!knownGap(entry.name) ||
 			typeof entry.count !== "number" ||
 			!Number.isInteger(entry.count) ||
 			entry.count < 0 ||
