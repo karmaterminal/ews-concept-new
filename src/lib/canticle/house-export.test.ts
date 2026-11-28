@@ -340,3 +340,61 @@ describe("render-house-card --from", () => {
 		expect(() => run("--from", FIXTURE_PATH, "--blind")).toThrow();
 	});
 });
+
+describe("🌿 round 2 on ews#14 (W-1, W-2) and 🌫's tag nit", () => {
+	it("W-1: a live count the export couldn't give (null, under a held board) prints not known, never none heard", () => {
+		const raw = edited((d) => {
+			d.deck.gaps = [{ name: "host_mute", count: 1 }];
+			for (const s of d.deck.stations) {
+				s.streams_known = "partial";
+				for (const x of s.streams) [x.live, x.newest_age_ms] = [null, null];
+			}
+		});
+		const text = stationText("fixture-scribe", raw);
+		expect(text).toContain("streams    not known (the board was held, muted or not read)");
+		expect(text).not.toContain("none heard");
+	});
+
+	it("W-1: a heard stream beside ones it couldn't count says both", () => {
+		const raw = edited((d) => {
+			d.deck.stations[3].streams_known = "partial";
+			d.deck.stations[3].streams[2].live = null;
+		});
+		expect(stationText("fixture-scribe", raw)).toContain("streams    chatter; 1 more not known");
+	});
+
+	it("W-2 (🌫's refinement): a capped untuned list is disclosed on its own, and the walk keeps its own word", () => {
+		// 🌫's case: 60 untuned streams on air, the export lists 50 and leaves 10 out.
+		const capped = live(
+			edited((d) => {
+				d.deck.left_out.untuned_more = 10;
+				d.deck.left_out.untuned_listed = 50;
+			}),
+		);
+		const text = renderHouseCard(capped.deck, capped.reader);
+		expect(text).toContain("  gaps       walk complete · untuned: 50 shown, 10 left out");
+		expect(text).not.toContain("gaps       none");
+		const unlisted = live(
+			edited((d) => {
+				d.deck.left_out.untuned_more = 10;
+				delete d.deck.left_out.untuned_listed; // an older producer that didn't say
+			}),
+		);
+		expect(renderHouseCard(unlisted.deck, unlisted.reader)).toContain("  gaps       walk complete · untuned: 10 left out");
+		const cut = live(edited((d) => ((d.deck.left_out.truncated = true), (d.deck.walk = "partial"))));
+		expect(renderHouseCard(cut.deck, cut.reader)).toContain("  gaps       walk partial · guide truncated");
+		const odd = live(edited((d) => (d.deck.left_out.truncated = "no")));
+		expect(renderHouseCard(odd.deck, odd.reader)).toContain("  gaps       walk complete · what was left out is unknown");
+		const missing = live(edited((d) => delete d.deck.left_out));
+		expect(renderHouseCard(missing.deck, missing.reader)).toContain("  gaps       walk complete · what was left out is unknown");
+		const clean = live();
+		expect(renderHouseCard(clean.deck, clean.reader)).toContain("  gaps       none (walk complete)");
+	});
+
+	it("🌫's nit: only the producer's own gap tags print; any other name is counted as unreadable", () => {
+		const { deck } = live(edited((d) => (d.deck.gaps = [{ name: "secret_token", count: 1 }, { name: "blind", count: 1 }])));
+		const text = renderHouseCard(deck, null);
+		expect(text).toContain("blind ×1, +1 unreadable");
+		expect(text).not.toContain("secret_token");
+	});
+});

@@ -63,7 +63,7 @@
     ],
     "walk": "complete",
     "gaps": [],
-    "left_out": { "untuned_more": 0, "truncated": false }
+    "left_out": { "untuned_more": 0, "untuned_listed": 0, "truncated": false }
   },
   "withheld": []
 }

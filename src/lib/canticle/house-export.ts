@@ -31,7 +31,33 @@ const CARRIER_UP = new Set(["EQUIPPED_SPEAKING", "EQUIPPED_QUIET", "UNEQUIPPED_P
 const MAX_STATIONS = 64;
 /** Station entries judged at all; past this, every one counts as not shown. */
 const MAX_ENTRIES = 4096;
-const GAP_NAME = /^[a-z][a-z_]{0,39}$/;
+/** The producer's own gap tags (frond-ear house-cli.ts): no other name prints (🌫's nit). */
+const GAP_TAGS = new Set([
+	"ended",
+	"not_listening",
+	"blind",
+	"joined_late",
+	"host_mute",
+	"records_lost",
+	"awaiting_landing",
+	"ear_muted",
+	"omitted_other_tuned",
+	"omitted_untuned",
+	"coverage_unknown",
+	"unrecognized_gap",
+	"row_local_omissions",
+	"row_coverage_unknown",
+	"row_unparsed",
+	"changed_mid_walk",
+	"page_unparsed",
+	"page_refused",
+	"row_count_mismatch",
+	"duplicate_row",
+	"untuned_count_mismatch",
+	"untuned_unlisted",
+	"untuned_partial_source",
+	"unrecognized_word",
+]);
 const MAX_GAPS = 32;
 
 export type LiveCard = { deck: CardDeck; reader: ReaderProfile | null; source: string };
@@ -54,9 +80,17 @@ function station(raw: unknown, daemonView: boolean): CardStation | null {
 	const kept = sanitizeStreams(
 		given?.map((item) => {
 			const entry = record(item);
+			// A live count the export couldn't give (null, or not a count) is carried as unknown, never as 0.
+			const counted = entry !== null && typeof entry.live === "number" && Number.isInteger(entry.live) && entry.live >= 0;
 			return entry === null
 				? null
-				: { stream: entry.stream, arrivals: null, newest_age_ms: entry.newest_age_ms, admitted: entry.admitted };
+				: {
+						stream: entry.stream,
+						arrivals: null,
+						newest_age_ms: entry.newest_age_ms,
+						admitted: entry.admitted,
+						...(counted ? {} : { on_air_unknown: true }),
+					};
 		}) ?? null,
 	);
 	const base = {
@@ -116,6 +150,18 @@ function readerInput(raw: unknown): unknown {
 	};
 }
 
+const nonNegativeInteger = (value: unknown): number | null =>
+	typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+
+/** frond-ear's `deck.left_out`, or null when it is missing or can't be read: never read as nothing left out. */
+function leftOutOf(raw: unknown): NonNullable<CardDeck["coverage"]>["left_out"] {
+	const left = record(raw);
+	if (left === null) return null;
+	const more = nonNegativeInteger(left.untuned_more);
+	if (more === null || typeof left.truncated !== "boolean") return null;
+	return { untuned_more: more, untuned_listed: nonNegativeInteger(left.untuned_listed), truncated: left.truncated };
+}
+
 /** The export's coverage (frond-ear's `deck.walk` and `deck.gaps`), as closed names and counts only. */
 function coverageOf(deck: Record<string, unknown>): CardDeck["coverage"] {
 	if (!Array.isArray(deck.gaps)) return null;
@@ -126,7 +172,7 @@ function coverageOf(deck: Record<string, unknown>): CardDeck["coverage"] {
 		if (
 			entry === null ||
 			typeof entry.name !== "string" ||
-			!GAP_NAME.test(entry.name) ||
+			!GAP_TAGS.has(entry.name) ||
 			typeof entry.count !== "number" ||
 			!Number.isInteger(entry.count) ||
 			entry.count < 0 ||
@@ -135,7 +181,12 @@ function coverageOf(deck: Record<string, unknown>): CardDeck["coverage"] {
 			unreadable += 1;
 		else gaps.push({ name: entry.name, count: entry.count });
 	}
-	return { walk: deck.walk === "complete" || deck.walk === "partial" ? deck.walk : null, gaps, unreadable };
+	return {
+		walk: deck.walk === "complete" || deck.walk === "partial" ? deck.walk : null,
+		gaps,
+		unreadable,
+		left_out: leftOutOf(deck.left_out),
+	};
 }
 
 /** The card's deck and reader from a house export, or null when the document isn't one. */

@@ -21,6 +21,11 @@ export type CardStream = {
 	newest_age_ms: number | null;
 	/** Whether the manifest grant admits this stream; null when the display can't say. */
 	admitted: boolean | null;
+	/**
+	 * A live export couldn't count what is on air here (its `live` was null: a held or muted board, or a stream its
+	 * walk didn't reach). Never printed as quiet.
+	 */
+	on_air_unknown?: true;
 };
 
 export type CardStation = {
@@ -63,7 +68,16 @@ export type CardDeck = {
 	 * A live export's coverage: whether its guide walk was whole, and the gaps it named (closed names with counts;
 	 * `unreadable` counts entries that weren't one). Null: the export gave no gap list. Absent: not a live deck.
 	 */
-	coverage?: { walk: "complete" | "partial" | null; gaps: Array<{ name: string; count: number }>; unreadable: number } | null;
+	coverage?: {
+		walk: "complete" | "partial" | null;
+		gaps: Array<{ name: string; count: number }>;
+		unreadable: number;
+		/**
+		 * The export's `left_out`, kept apart from the walk (🌫): a whole walk can sit beside a capped untuned list.
+		 * Null when the export didn't say, or said it in a way the card can't read.
+		 */
+		left_out: { untuned_more: number; untuned_listed: number | null; truncated: boolean } | null;
+	} | null;
 	connected: boolean;
 	/** The collector's real window start (§3.C: "since ‹time›", never "today"); null when unknown. */
 	window_start_ms: number | null;
@@ -111,6 +125,7 @@ export function sanitizeStreams(raw: unknown): CardStream[] | null {
 			arrivals: arrivals === null ? null : Math.floor(arrivals),
 			newest_age_ms: nonNegativeNumber(source.newest_age_ms),
 			admitted: typeof source.admitted === "boolean" ? source.admitted : null,
+			...(source.on_air_unknown === true ? { on_air_unknown: true as const } : {}),
 		});
 	}
 	return out.sort((a, b) => (a.stream < b.stream ? -1 : a.stream > b.stream ? 1 : 0));
@@ -273,6 +288,13 @@ function age(ms: number | null): string {
 
 function streamsLine(station: CardStation, heard: CardStream[]): string {
 	if (station.streams_known === "unknown") return "unknown (no stream knowledge for this station)";
+	// A count the export couldn't give is never "none heard" (🌿, ews#14 W-1).
+	const unknown = station.streams.filter((item) => item.on_air_unknown === true && !heard.includes(item)).length;
+	if (unknown > 0) {
+		return heard.length === 0
+			? "not known (the board was held, muted or not read)"
+			: `${heard.map((item) => item.stream).join(", ")}; ${unknown} more not known`;
+	}
 	const names = heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard";
 	if (station.streams_known !== "partial") return names;
 	if (station.streams_given === null) return `${names} (more may exist)`;
@@ -324,6 +346,18 @@ function coverageLine(coverage: NonNullable<CardDeck["coverage"]> | null): strin
 	if (coverage === null) return "unknown (the export gave no gap list)";
 	const named = coverage.gaps.map((gap) => `${gap.name} ×${gap.count}`);
 	if (coverage.unreadable > 0) named.push(`+${coverage.unreadable} unreadable`);
+	const left = coverage.left_out;
+	if (left === null) named.push("what was left out is unknown");
+	else {
+		if (left.untuned_more > 0) {
+			named.push(
+				left.untuned_listed === null
+					? `untuned: ${left.untuned_more} left out`
+					: `untuned: ${left.untuned_listed} shown, ${left.untuned_more} left out`,
+			);
+		}
+		if (left.truncated) named.push("guide truncated");
+	}
 	if (named.length === 0 && coverage.walk === "complete") return "none (walk complete)";
 	return `walk ${coverage.walk ?? "unknown"} · ${named.length === 0 ? "no gap named" : named.join(", ")}`;
 }

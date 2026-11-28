@@ -221,7 +221,9 @@ the daemon's `status` presence table and every `canticle_guide` row, tuned and u
 It has no beacon age and no window start, so a carrier-up presence word reads as visible with no age, and arrivals stay
 unknown. Only an observed presence word says visible or not. A station the presence table doesn't hold reads unknown,
 since that table is capped and empty before its first snapshot. The export's guide gaps (`host_mute`, `records_lost`, a
-broken walk and so on) show on the card as names and counts. The guide's live count (on air now) is a different number, so the card doesn't borrow it. A read scope is a
+broken walk and so on) show on the card as names and counts. An untuned list the export capped is disclosed apart
+from the walk ("untuned: 50 shown, 10 left out"), since a whole walk can sit beside it. A live count the export
+couldn't give (a held or muted board, or a stream its walk didn't reach) prints "not known", never "none heard". The guide's live count (on air now) is a different number, so the card doesn't borrow it. A read scope is a
 list like the streams, and a partial list is not a total. That holds when the card keeps only 64 patterns, drops a
 malformed one, or the export withheld an identity-shaped one or didn't say its scope is complete. A scope miss alone
 then reads unknown, never no. A denial known some other way (the grant, or payload text off) still reads no, and the
