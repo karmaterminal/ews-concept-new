@@ -1,0 +1,64 @@
+{
+  "kind": "frond-house-export/0",
+  "source": "frond-ear abc1234 ear fixture-ear",
+  "ear": "fixture-ear",
+  "at": "2026-11-27T09:00:00.000Z",
+  "now_ms": 1795770000000,
+  "look": "names and state words only: no payload text, item content, key, Discord id, path or token",
+  "reader": {
+    "reader": "fixture-ear",
+    "payload_text": true,
+    "may_read": ["fixture-scribe:chatter", "fixture-scribe:facts", "*:ops.fleet", "fixture-dark:chatter"],
+    "basis": {
+      "canticle": "enabled",
+      "hear": "payload text of tuned streams",
+      "push": { "mode": "off", "style": "records", "muted": false, "stations": [{ "station": "fixture-scribe", "mode": "immediate" }], "key_scoped": 0 }
+    }
+  },
+  "deck": {
+    "view": "daemon",
+    "listener": "listening",
+    "connected": true,
+    "window_start_ms": null,
+    "manifest": "read",
+    "stations": [
+      {
+        "name": "fixture-dark",
+        "presence": null,
+        "verification": null,
+        "in_manifest": true,
+        "streams_known": "complete",
+        "streams": [{ "stream": "chatter", "tuned": true, "admitted": true, "live": 0, "newest_age_ms": null }]
+      },
+      {
+        "name": "fixture-lighthouse",
+        "presence": "EQUIPPED_QUIET",
+        "verification": "verified",
+        "in_manifest": true,
+        "streams_known": "complete",
+        "streams": [{ "stream": "lighthouse", "tuned": false, "admitted": true, "live": 1, "newest_age_ms": 40000 }]
+      },
+      {
+        "name": "fixture-root",
+        "presence": "ROOT_UNKNOWN",
+        "verification": "ROOT_UNKNOWN",
+        "in_manifest": false,
+        "streams_known": "complete",
+        "streams": [{ "stream": "ops.fleet", "tuned": true, "admitted": null, "live": 1, "newest_age_ms": 5000 }]
+      },
+      {
+        "name": "fixture-scribe",
+        "presence": "EQUIPPED_SPEAKING",
+        "verification": "verified",
+        "in_manifest": true,
+        "streams_known": "complete",
+        "streams": [
+          { "stream": "chatter", "tuned": true, "admitted": true, "live": 2, "newest_age_ms": 900 },
+          { "stream": "display", "tuned": false, "admitted": true, "live": 0, "newest_age_ms": null },
+          { "stream": "facts", "tuned": true, "admitted": true, "live": 0, "newest_age_ms": null }
+        ]
+      }
+    ],
+    "left_out": { "unnamed_stations": 0, "untuned_more": 0, "truncated": false, "refused_names": 0 }
+  }
+}

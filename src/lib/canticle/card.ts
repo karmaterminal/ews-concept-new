@@ -38,11 +38,18 @@ export type CardStation = {
 	streams_known: "complete" | "unknown" | "partial";
 	/** Entries given for this station, before any were left out; null when unknown. */
 	streams_given: number | null;
+	/**
+	 * Only when no beacon age is given (an ear's export): whether the collector's own presence word says the beacon is
+	 * heard now. Never inferred, and never stands in for an age.
+	 */
+	beacon_heard?: boolean;
 };
 
 export type CardDeck = {
 	now_ms: number;
 	synthetic: boolean;
+	/** A live deck's source (one ear's `frond-ear house-export`); absent for the demo and the house page. */
+	live_source?: string;
 	connected: boolean;
 	/** The collector's real window start (§3.C: "since ‹time›", never "today"); null when unknown. */
 	window_start_ms: number | null;
@@ -68,7 +75,7 @@ function nonNegativeNumber(value: unknown): number | null {
 
 const MAX_CARD_STREAMS = 16;
 
-function sanitizeStreams(raw: unknown): CardStream[] | null {
+export function sanitizeStreams(raw: unknown): CardStream[] | null {
 	if (!Array.isArray(raw)) return null;
 	const seen = new Set<string>();
 	const out: CardStream[] = [];
@@ -157,7 +164,11 @@ export function stationVisible(station: CardStation, deck: CardDeck): { visible:
 	if (!deck.connected) return { visible: "unknown", why: "the collector has no link, so this is unobserved, not offline" };
 	if (NOT_HEARD_STATES.has(station.state)) return { visible: "no", why: "its beacon is not heard here" };
 	if (station.state === "unknown") return { visible: "unknown", why: "receive is degraded or a gap" };
-	if (station.beacon_age_ms === null) return { visible: "unknown", why: "no beacon age" };
+	if (station.beacon_age_ms === null) {
+		return station.beacon_heard === true
+			? { visible: "yes", why: "its presence word says its beacon is heard; no beacon age given" }
+			: { visible: "unknown", why: "no beacon age" };
+	}
 	if (carrierLevel(station.beacon_age_ms) <= 0) return { visible: "no", why: "its last beacon is stale" };
 	return { visible: "yes", why: "its beacon is heard" };
 }
@@ -213,8 +224,8 @@ function streamsLine(station: CardStation, heard: CardStream[]): string {
 	if (station.streams_known === "unknown") return "unknown (no stream knowledge for this station)";
 	const names = heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard";
 	if (station.streams_known !== "partial") return names;
-	const left = (station.streams_given ?? station.streams.length) - station.streams.length;
-	return `${names} (+${left} not shown)`;
+	if (station.streams_given === null) return `${names} (more may exist)`;
+	return `${names} (+${station.streams_given - station.streams.length} not shown)`;
 }
 
 function arrivalsLine(station: CardStation, deck: CardDeck): string {
@@ -223,7 +234,8 @@ function arrivalsLine(station: CardStation, deck: CardDeck): string {
 	if (station.streams.some((item) => item.arrivals === null)) return "unknown";
 	const total = station.streams.reduce((sum, item) => sum + (item.arrivals ?? 0), 0);
 	if (station.streams_known === "partial") {
-		const given = station.streams_given ?? station.streams.length;
+		if (station.streams_given === null) return `at least ${total} since ${iso(deck.window_start_ms)} (more stream entries may exist)`;
+		const given = station.streams_given;
 		return `at least ${total} since ${iso(deck.window_start_ms)} (${given - station.streams.length} of ${given} stream entries not shown)`;
 	}
 	return `${total} since ${iso(deck.window_start_ms)}`;
@@ -242,7 +254,7 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 		deck.connected
 			? `  state      ${station.state} · ${stateGloss(station.state)}`
 			: "  state      unobserved (the collector has no link)",
-		`  beacon     ${deck.connected ? age(station.beacon_age_ms) : "unknown (no link)"}`,
+		`  beacon     ${!deck.connected ? "unknown (no link)" : station.beacon_age_ms === null && station.beacon_heard === true ? "heard (no age in this export)" : age(station.beacon_age_ms)}`,
 		`  arrivals   ${arrivalsLine(station, deck)}`,
 		`  streams    ${streamsLine(station, heard)}`,
 		`  station visible: ${seen.visible} (${seen.why})`,
@@ -259,7 +271,7 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 
 export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): string {
 	const head = [
-		`HOUSE CARD${deck.synthetic ? " · SYNTHETIC — DEMO DATA" : ""}`,
+		`HOUSE CARD${deck.synthetic ? " · SYNTHETIC — DEMO DATA" : deck.live_source !== undefined ? ` · LIVE (this ear) · ${deck.live_source}` : ""}`,
 		`  as of      ${iso(deck.now_ms)}`,
 		`  window     ${deck.window_start_ms === null ? "start unknown" : `since ${iso(deck.window_start_ms)} (memory only)`}`,
 		`  collector  ${deck.connected ? "linked" : "no link: every station is unobserved, not offline"}`,
