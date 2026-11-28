@@ -43,6 +43,11 @@ export type CardStation = {
 	 * heard now. Never inferred, and never stands in for an age.
 	 */
 	beacon_heard?: boolean;
+	/**
+	 * The station's state is unknown because the collector's presence table doesn't hold it: that table is capped
+	 * and empty before its first snapshot, so absence is no evidence of "not heard" (🌿, ews#14).
+	 */
+	presence_absent?: true;
 };
 
 export type CardDeck = {
@@ -52,6 +57,13 @@ export type CardDeck = {
 	live_source?: string;
 	/** Station names a live export withheld (identity-shaped); null when how many is unknown. Absent: none. */
 	stations_withheld?: number | null;
+	/** Stations the card left out: past its cap, or malformed. Absent: none. */
+	stations_not_shown?: number;
+	/**
+	 * A live export's coverage: whether its guide walk was whole, and the gaps it named (closed names with counts;
+	 * `unreadable` counts entries that weren't one). Null: the export gave no gap list. Absent: not a live deck.
+	 */
+	coverage?: { walk: "complete" | "partial" | null; gaps: Array<{ name: string; count: number }>; unreadable: number } | null;
 	connected: boolean;
 	/** The collector's real window start (§3.C: "since ‹time›", never "today"); null when unknown. */
 	window_start_ms: number | null;
@@ -193,7 +205,15 @@ function inScope(may_read: string[], station: string, stream: string): boolean {
 export function stationVisible(station: CardStation, deck: CardDeck): { visible: Tri; why: string } {
 	if (!deck.connected) return { visible: "unknown", why: "the collector has no link, so this is unobserved, not offline" };
 	if (NOT_HEARD_STATES.has(station.state)) return { visible: "no", why: "its beacon is not heard here" };
-	if (station.state === "unknown") return { visible: "unknown", why: "receive is degraded or a gap" };
+	if (station.state === "unknown") {
+		return {
+			visible: "unknown",
+			why:
+				station.presence_absent === true
+					? "it is absent from the ear's presence table, which is capped and empty before its first snapshot: unknown, not unheard"
+					: "receive is degraded or a gap",
+		};
+	}
 	if (station.beacon_age_ms === null) {
 		return station.beacon_heard === true
 			? { visible: "yes", why: "its presence word says its beacon is heard; no beacon age given" }
@@ -300,11 +320,19 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 	return lines.join("\n");
 }
 
+function coverageLine(coverage: NonNullable<CardDeck["coverage"]> | null): string {
+	if (coverage === null) return "unknown (the export gave no gap list)";
+	const named = coverage.gaps.map((gap) => `${gap.name} ×${gap.count}`);
+	if (coverage.unreadable > 0) named.push(`+${coverage.unreadable} unreadable`);
+	if (named.length === 0 && coverage.walk === "complete") return "none (walk complete)";
+	return `walk ${coverage.walk ?? "unknown"} · ${named.length === 0 ? "no gap named" : named.join(", ")}`;
+}
+
 function scopePartial(reader: ReaderProfile): string {
 	const n = reader.may_read_left_out;
 	if (n === undefined || reader.may_read === null) return "";
 	const what = n === null ? "some patterns" : `${n} pattern${n === 1 ? "" : "s"}`;
-	return ` (partial: ${what} not kept, so a stream outside it reads unknown)`;
+	return ` (partial: ${what} not kept, so a scope miss alone is unknown)`;
 }
 
 export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): string {
@@ -314,13 +342,17 @@ export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): s
 		`  window     ${deck.window_start_ms === null ? "start unknown" : `since ${iso(deck.window_start_ms)} (memory only)`}`,
 		`  collector  ${deck.connected ? "linked" : "no link: every station is unobserved, not offline"}`,
 		reader === null
-			? "  reader     none given: readable here stays unknown"
+			? "  reader     none given: without one, readable here is never yes (a known denial still reads no)"
 			: `  reader     ${reader.reader} · payload text: ${reader.payload_text === null ? "unknown" : reader.payload_text ? "on" : "off"} · read scope: ${reader.may_read === null ? "unknown" : reader.may_read.length === 0 ? "none" : reader.may_read.join(", ")}${scopePartial(reader)}`,
 		...(deck.stations_withheld === undefined
 			? []
 			: [
 					`  withheld   ${deck.stations_withheld === null ? "an unknown number of" : deck.stations_withheld} station name${deck.stations_withheld === 1 ? "" : "s"} the export withheld (identity-shaped or not identifiers)`,
 				]),
+		...(deck.stations_not_shown === undefined || deck.stations_not_shown === 0
+			? []
+			: [`  not shown  ${deck.stations_not_shown} station${deck.stations_not_shown === 1 ? "" : "s"} (past the card's 64, or malformed)`]),
+		...(deck.coverage === undefined ? [] : [`  gaps       ${coverageLine(deck.coverage)}`]),
 	];
 	const cards = deck.stations.map((station) => renderStationCard(station, deck, reader));
 	return [head.join("\n"), ...cards].join("\n\n") + "\n";

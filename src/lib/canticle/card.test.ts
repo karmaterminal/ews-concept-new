@@ -141,7 +141,7 @@ describe("honesty: readable only on the reader profile's word, unknown stays unk
 	it("without a reader profile no stream reads as readable, and the header says why", () => {
 		const text = renderHouseCard(DEMO_DECK(NOW), null);
 		expect(text).not.toContain("readable here: yes");
-		expect(text).toContain("reader     none given: readable here stays unknown");
+		expect(text).toContain("reader     none given: without one, readable here is never yes (a known denial still reads no)");
 		expect(streamLine(text, "lighthouse")).toContain("readable here: unknown (no reader profile)");
 		// a definite no from the station or the grant still holds without a reader
 		expect(streamLine(text, "forge")).toContain("readable here: no");
@@ -295,8 +295,8 @@ describe("a partial read scope is not a total (🌫, ews#14 review): a pattern t
 
 	it("the header says the scope is partial and how much was left out", () => {
 		const text = renderHouseCard(DEMO_DECK(NOW), reader([...fillers, "demo-moss:lighthouse"]));
-		expect(text).toContain("(partial: 1 pattern not kept, so a stream outside it reads unknown)");
+		expect(text).toContain("(partial: 1 pattern not kept, so a scope miss alone is unknown)");
 		const unknown = renderHouseCard(DEMO_DECK(NOW), sanitizeReader({ reader: "src", payload_text: true, may_read: [], may_read_complete: false }));
-		expect(unknown).toContain("read scope: none (partial: some patterns not kept, so a stream outside it reads unknown)");
+		expect(unknown).toContain("read scope: none (partial: some patterns not kept, so a scope miss alone is unknown)");
 	});
 });

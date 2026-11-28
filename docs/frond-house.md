@@ -219,10 +219,13 @@ That export takes the reader profile from the ear's real config: its `canticle.t
 on whenever `hear` shows any (delivery gates only pushes). Its deck is the manifest's stations and the tune's, plus
 the daemon's `status` presence table and every `canticle_guide` row, tuned and untuned, as names and state words.
 It has no beacon age and no window start, so a carrier-up presence word reads as visible with no age, and arrivals stay
-unknown. The guide's live count (on air now) is a different number, so the card doesn't borrow it. A read scope is a
+unknown. Only an observed presence word says visible or not. A station the presence table doesn't hold reads unknown,
+since that table is capped and empty before its first snapshot. The export's guide gaps (`host_mute`, `records_lost`, a
+broken walk and so on) show on the card as names and counts. The guide's live count (on air now) is a different number, so the card doesn't borrow it. A read scope is a
 list like the streams, and a partial list is not a total. That holds when the card keeps only 64 patterns, drops a
-malformed one, or the export withheld an identity-shaped one. A stream outside the kept part then reads unknown, never
-no, and the reader line says the scope is partial. Station names the export withheld are counted on the card, never
+malformed one, or the export withheld an identity-shaped one or didn't say its scope is complete. A scope miss alone
+then reads unknown, never no. A denial known some other way (the grant, or payload text off) still reads no, and the
+reader line says the scope is partial. Station names the export withheld are counted on the card, never
 shown. It is one ear reading its own view. The house page's live deck still waits for the Q6 answer.
 
 **Against frond-ear's `canticle_guide`** (frond-ear `d808392`, `src/canticle/guide.ts`). The guide is one row per tuned

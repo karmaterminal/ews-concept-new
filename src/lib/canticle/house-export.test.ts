@@ -69,11 +69,29 @@ describe("the live card: one ear's export, said as LIVE and by its source", () =
 		expect(streamLine(text, "display")).toContain("readable here: no (fixture-scribe:display is outside this reader's read scope)");
 	});
 
-	it("a station the daemon read but whose beacon its presence table doesn't hold is not heard; its tuned stream reads when heard", () => {
+	it("a station absent from the ear's presence table is unknown, not unheard (🌿, ews#14 E-F1); its tuned stream reads when heard", () => {
 		const text = stationText("fixture-dark");
-		expect(text).toContain("state      not_heard");
-		expect(text).toContain("station visible: no (its beacon is not heard here)");
+		expect(text).toContain("state      unknown");
+		expect(text).toContain("station visible: unknown (it is absent from the ear's presence table");
+		expect(text).not.toContain("not_heard");
+		expect(text).not.toMatch(/station visible: no/);
 		expect(streamLine(text, "chatter")).toContain("readable here: yes (when heard)");
+	});
+
+	it("🌿's repro: absent from the presence table with 3 records on air, the newest 2 s old: unknown, never no", () => {
+		const raw = edited((d) => {
+			d.deck.stations[0].streams[0].live = 3;
+			d.deck.stations[0].streams[0].newest_age_ms = 2000;
+		});
+		const text = stationText("fixture-dark", raw);
+		expect(text).toContain("streams    chatter");
+		expect(text).toContain("station visible: unknown");
+		expect(text).not.toContain("station visible: no");
+	});
+
+	it("only an observed presence word gives no: UNOBSERVABLE is not heard", () => {
+		const raw = edited((d) => (d.deck.stations[0].presence = "UNOBSERVABLE"));
+		expect(stationText("fixture-dark", raw)).toContain("station visible: no (its beacon is not heard here)");
 	});
 
 	it("a stream the manifest doesn't name keeps admission unknown, so readable here stays unknown", () => {
@@ -239,11 +257,67 @@ describe("end to end: a config with an id-shaped tune pattern (🌫, 05:41Z)", (
 		const { deck, reader } = live(WITHHELD);
 		expect(reader?.may_read_left_out).toBe(1);
 		const text = renderHouseCard(deck, reader);
-		expect(text).toContain("read scope: fixture-scribe:chatter (partial: 1 pattern not kept, so a stream outside it reads unknown)");
+		expect(text).toContain("read scope: fixture-scribe:chatter (partial: 1 pattern not kept, so a scope miss alone is unknown)");
 		const facts = streamLine(text, "facts");
 		expect(facts).toContain("readable here: unknown");
 		expect(facts).not.toContain("readable here: no");
 		expect(streamLine(text, "chatter")).toContain("readable here: yes (when heard)");
+	});
+});
+
+describe("🌿's should-fixes on ews#14: a missing flag, stations not shown, a star stream, the export's gaps", () => {
+	it("E-F2: a reader whose may_read_complete is absent or not a boolean is a partial scope", () => {
+		for (const value of [undefined, null, "false", 0]) {
+			const raw = edited((d) => {
+				if (value === undefined) delete d.reader.may_read_complete;
+				else d.reader.may_read_complete = value;
+			});
+			expect(streamLine(stationText("fixture-lighthouse", raw), "lighthouse"), String(value)).toContain("readable here: unknown");
+		}
+		expect(streamLine(stationText("fixture-lighthouse"), "lighthouse")).toContain("readable here: no");
+	});
+
+	it("E-F3: stations past the card's 64, or dropped as malformed, are counted on the card", () => {
+		const raw = edited((d) => {
+			for (let i = 0; i < 64; i++) d.deck.stations.push({ name: `zz-${String(i).padStart(2, "0")}`, presence: null, streams_known: "complete", streams: [] });
+			d.deck.stations.splice(1, 0, { name: "bad name!", presence: null, streams: [] });
+		});
+		const { deck, reader } = live(raw);
+		expect(deck.stations).toHaveLength(64);
+		expect(renderHouseCard(deck, reader)).toContain("  not shown  5 stations (past the card's 64, or malformed)");
+		const clean = live();
+		expect(renderHouseCard(clean.deck, clean.reader)).not.toContain("not shown");
+	});
+
+	it("E-F4: a star stream in an export's scope matches nothing in frond-ear, so it can't read yes: dropped, and the scope is partial", () => {
+		const raw = edited((d) => (d.reader.may_read = ["fixture-lighthouse:*"]));
+		const { reader } = live(raw);
+		expect(reader?.may_read).toEqual([]);
+		expect(reader?.may_read_left_out).toBe(1);
+		const line = streamLine(stationText("fixture-lighthouse", raw), "lighthouse");
+		expect(line).not.toContain("readable here: yes");
+		expect(line).toContain("readable here: unknown");
+	});
+
+	it("carries the export's gaps as their names and counts, and an absent list as unknown", () => {
+		const raw = edited((d) => {
+			d.deck.walk = "partial";
+			d.deck.gaps = [
+				{ name: "host_mute", count: 1 },
+				{ name: "page_unparsed", count: 2 },
+				{ name: "Not A Name!", count: 1 },
+			];
+		});
+		const { deck, reader } = live(raw);
+		const text = renderHouseCard(deck, reader);
+		expect(text).toContain("  gaps       walk partial · host_mute ×1, page_unparsed ×2, +1 unreadable");
+		expect(text).not.toContain("Not A Name");
+		const clean = live();
+		expect(renderHouseCard(clean.deck, clean.reader)).toContain("  gaps       none (walk complete)");
+		const broken = live(edited((d) => (d.deck.walk = "partial")));
+		expect(renderHouseCard(broken.deck, broken.reader)).toContain("  gaps       walk partial · no gap named");
+		const old = live(edited((d) => delete d.deck.gaps));
+		expect(renderHouseCard(old.deck, old.reader)).toContain("  gaps       unknown (the export gave no gap list)");
 	});
 });
 
