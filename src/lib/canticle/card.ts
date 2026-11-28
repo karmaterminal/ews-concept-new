@@ -66,8 +66,8 @@ export type ReaderProfile = {
 	may_read: string[] | null;
 	/**
 	 * Set only when `may_read` is not the whole scope (a partial list is not a total, as for streams): how many
-	 * patterns the card didn't keep (past the cap, or malformed), or null when the source says some were withheld
-	 * and how many is unknown. A stream outside a partial scope reads unknown, never no.
+	 * patterns the card didn't keep (past the cap, or malformed) plus those the source withheld (`may_read_withheld`),
+	 * or null when how many is unknown. A stream outside a partial scope reads unknown, never no.
 	 */
 	may_read_left_out?: number | null;
 };
@@ -164,12 +164,19 @@ export function sanitizeReader(raw: unknown): ReaderProfile | null {
 			else may_read.push(pattern);
 		}
 	}
-	const withheld = source.may_read_complete === false;
+	// What the source itself withheld (frond-ear's house-export: identity-shaped tune patterns): its count is added
+	// to the card's own. A source that says its scope is incomplete without a usable count, or gives a count that
+	// isn't one, leaves how many unknown. Nothing a source says can make a partial scope whole.
+	const flagged = source.may_read_complete === false;
+	const given = source.may_read_withheld;
+	const counted = typeof given === "number" && Number.isInteger(given) && given >= 0 ? given : undefined;
+	const unknownCount = (given !== undefined && counted === undefined) || (flagged && (counted === undefined || counted === 0));
+	const total = left_out + (counted ?? 0);
 	return {
 		reader: source.reader,
 		payload_text: typeof source.payload_text === "boolean" ? source.payload_text : null,
 		may_read,
-		...(may_read === null ? {} : withheld ? { may_read_left_out: null } : left_out > 0 ? { may_read_left_out: left_out } : {}),
+		...(may_read === null ? {} : unknownCount ? { may_read_left_out: null } : total > 0 ? { may_read_left_out: total } : {}),
 	};
 }
 

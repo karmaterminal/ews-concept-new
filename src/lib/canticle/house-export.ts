@@ -12,7 +12,8 @@
 //   arrivals stay unknown rather than borrow it. A stream with anything on air prints as heard;
 // - no host association and no seal: the export knows neither, so host stays blank;
 // - names the export withheld (identity-shaped) are counted on the card, never shown, and a reader scope it says is
-//   incomplete (`may_read_complete: false`) stays partial, so a stream outside it reads unknown, never no.
+//   incomplete (`may_read_complete: false`, `may_read_withheld` patterns) stays partial, so a stream outside it reads
+//   unknown, never no.
 // Only closed fields are copied, each checked; anything else in the document never reaches the card.
 import { CANTICLE_IDENTIFIER, CANTICLE_STATES } from "./shape";
 import { sanitizeReader, sanitizeStreams, type CardDeck, type CardStation, type ReaderProfile } from "./card";

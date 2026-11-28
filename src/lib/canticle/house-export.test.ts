@@ -216,6 +216,34 @@ describe("the export's partial scope and withheld names (🌫, #147 and ews#14 r
 	it("a malformed withheld list can't be read as none withheld", () => {
 		const { deck } = live(edited((d) => (d.withheld = [{ field: "deck.stations", reason: "x", count: -1 }])));
 		expect(renderHouseCard(deck, null)).toContain("  withheld   an unknown number of station names the export withheld");
+		// An export with no withheld list at all (an older producer) can't say none were withheld either.
+		const missing = live(edited((d) => delete d.withheld));
+		expect(renderHouseCard(missing.deck, null)).toContain("  withheld   an unknown number of station names the export withheld");
+	});
+});
+
+describe("end to end: a config with an id-shaped tune pattern (🌫, 05:41Z)", () => {
+	// Made by frond-ear's own producer (house-export --offline, frond-ear bfc8794) from a config whose tune is
+	// fixture-scribe:chatter and fixture-scribe:<a key id>. The second is withheld, so the scope says it lost one.
+	const WITHHELD = JSON.parse(readFileSync(join(import.meta.dirname, "fixtures", "house-export.withheld.json"), "utf8")) as unknown;
+
+	it("the producer withheld one pattern, by count only", () => {
+		const doc = WITHHELD as { reader: { may_read: string[]; may_read_complete: boolean; may_read_withheld: number } };
+		expect(doc.reader.may_read).toEqual(["fixture-scribe:chatter"]);
+		expect(doc.reader.may_read_complete).toBe(false);
+		expect(doc.reader.may_read_withheld).toBe(1);
+		expect(JSON.stringify(WITHHELD)).not.toMatch(/[0-9a-f]{16}/i);
+	});
+
+	it("the stream no kept pattern matches renders unknown, never outside the scope; the kept one still reads yes", () => {
+		const { deck, reader } = live(WITHHELD);
+		expect(reader?.may_read_left_out).toBe(1);
+		const text = renderHouseCard(deck, reader);
+		expect(text).toContain("read scope: fixture-scribe:chatter (partial: 1 pattern not kept, so a stream outside it reads unknown)");
+		const facts = streamLine(text, "facts");
+		expect(facts).toContain("readable here: unknown");
+		expect(facts).not.toContain("readable here: no");
+		expect(streamLine(text, "chatter")).toContain("readable here: yes (when heard)");
 	});
 });
 

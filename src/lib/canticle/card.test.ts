@@ -274,6 +274,23 @@ describe("a partial read scope is not a total (🌫, ews#14 review): a pattern t
 		expect(streamLine(card(DEMO_DECK(NOW), "demo-iris", r), "chatter")).toContain("readable here: yes");
 	});
 
+	it("a source's withheld count is carried and added to the card's own drops; a bad count is unknown", () => {
+		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b", "bad"], may_read_complete: false, may_read_withheld: 2 })?.may_read_left_out).toBe(3);
+		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_complete: false, may_read_withheld: -1 })?.may_read_left_out).toBeNull();
+		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_complete: false })?.may_read_left_out).toBeNull();
+		// A count with no flag, or the flag saying complete, still can't make the scope whole.
+		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_complete: true, may_read_withheld: 1 })?.may_read_left_out).toBe(1);
+		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_withheld: 0 })?.may_read_left_out).toBeUndefined();
+	});
+
+	it("an independently known denial stays no under a partial scope: the grant, or payload text off", () => {
+		const partial = reader([...fillers, "demo-iris:chatter"]);
+		expect(streamLine(card(DEMO_DECK(NOW), "demo-iris", partial), "forge")).toContain("readable here: no (the manifest grant does not admit this stream)");
+		const off = sanitizeReader({ reader: "off", payload_text: false, may_read: [...fillers, "x:y"] });
+		expect(line(off)).toContain("readable here: no (payload text is off for this session)");
+		expect(line(off)).not.toContain("outside");
+	});
+
 	it("the header says the scope is partial and how much was left out", () => {
 		const text = renderHouseCard(DEMO_DECK(NOW), reader([...fillers, "demo-moss:lighthouse"]));
 		expect(text).toContain("(partial: 1 pattern not kept, so a stream outside it reads unknown)");

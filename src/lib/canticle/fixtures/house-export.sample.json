@@ -10,6 +10,7 @@
     "payload_text": true,
     "may_read": ["fixture-scribe:chatter", "fixture-scribe:facts", "*:ops.fleet", "fixture-dark:chatter"],
     "may_read_complete": true,
+    "may_read_withheld": 0,
     "basis": {
       "canticle": "enabled",
       "hear": "payload text of tuned streams",
