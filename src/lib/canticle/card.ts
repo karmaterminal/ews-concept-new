@@ -10,6 +10,7 @@
 // The card never says "readable" without a reader profile that says so, and anything unknown prints as "unknown",
 // never as yes or no. It renders shape only: names, closed state words, ages and counts. No payload text reaches it.
 import { CANTICLE_IDENTIFIER, carrierLevel, stateGloss } from "./shape";
+import { gapLine } from "./gaps";
 import { DEMO_HOUSE, type House, type HouseStation } from "./house";
 
 export type Tri = "yes" | "no" | "unknown";
@@ -368,6 +369,21 @@ function coverageLine(coverage: NonNullable<CardDeck["coverage"]> | null): strin
 	return `walk ${coverage.walk ?? "unknown"} · ${named.length === 0 ? "no gap named" : named.join(", ")}`;
 }
 
+/** One plain line per named gap under the gaps line: what it means, and which way it pushes (./gaps). */
+function gapMeanings(coverage: NonNullable<CardDeck["coverage"]> | null): string[] {
+	if (coverage === null) return [];
+	const lines = coverage.gaps.flatMap((gap) => {
+		const line = gapLine(gap.name);
+		return line === null ? [] : [`             ${gap.name}: ${line}`];
+	});
+	if (coverage.unreadable > 0) {
+		lines.push(
+			`             +${coverage.unreadable} unreadable: entries the card can't read (a name it doesn't know, a bad count, or past its 64); what they mean is unknown`,
+		);
+	}
+	return lines;
+}
+
 function scopePartial(reader: ReaderProfile): string {
 	const n = reader.may_read_left_out;
 	if (n === undefined || reader.may_read === null) return "";
@@ -392,7 +408,7 @@ export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): s
 		...(deck.stations_not_shown === undefined || deck.stations_not_shown === 0
 			? []
 			: [`  not shown  ${deck.stations_not_shown} station${deck.stations_not_shown === 1 ? "" : "s"} (past the card's 64, or malformed)`]),
-		...(deck.coverage === undefined ? [] : [`  gaps       ${coverageLine(deck.coverage)}`]),
+		...(deck.coverage === undefined ? [] : [`  gaps       ${coverageLine(deck.coverage)}`, ...gapMeanings(deck.coverage)]),
 	];
 	const cards = deck.stations.map((station) => renderStationCard(station, deck, reader));
 	return [head.join("\n"), ...cards].join("\n\n") + "\n";
