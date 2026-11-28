@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -32,7 +32,11 @@ function output(edit: (doc: any) => void = () => {}): string {
 }
 
 function check(...args: string[]) {
-	const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+	return checkWith(process.env, ...args);
+}
+
+function checkWith(env: NodeJS.ProcessEnv, ...args: string[]) {
+	const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8", env, timeout: 60_000 });
 	return { code: r.status, out: r.stdout, err: r.stderr };
 }
 
@@ -78,3 +82,65 @@ describe("scripts/check-gap-names.mjs", () => {
 		expect(r.err).toContain("no-such-frond-ear-checkout");
 	});
 });
+
+/** A stand-in frond-ear checkout whose src/cli.ts runs `body` (it is handed the path it may write to). */
+function stubCheckout(body: string): { dir: string; seen: string } {
+	const dir = mkdtempSync(join(tmpdir(), "check-gap-names-stub-"));
+	mkdirSync(join(dir, "src"));
+	const seen = join(dir, "seen-env.json");
+	writeFileSync(join(dir, "src", "cli.ts"), `const SEEN = ${JSON.stringify(seen)};\n${body}\n`);
+	return { dir, seen };
+}
+
+const GOOD_DOC = JSON.stringify({
+	kind: "frond-house-gap-names/0",
+	source: "frond-ear abc1234",
+	names: [...FIXTURE.emitted],
+	board_empty: [...FIXTURE.board_empty],
+	walk_breaks: [...FIXTURE.walk_breaks],
+	not_coverage: [...FIXTURE.not_coverage],
+});
+
+describe("🌿 on ews#16: the frond-ear CLI runs with an allowlisted environment and a timeout", () => {
+	it("a planted token never reaches the child: it sees PATH and HOME only", () => {
+		const { dir, seen } = stubCheckout(
+			`import { writeFileSync } from "node:fs";\nwriteFileSync(SEEN, JSON.stringify(process.env));\nprocess.stdout.write(${JSON.stringify(GOOD_DOC)});`,
+		);
+		const planted = "ghp_" + "Fake0Token1Planted2For3The4Test5Only6";
+		const r = checkWith(
+			{ ...process.env, GH_TOKEN: planted, GITHUB_TOKEN: planted, FROND_PLANTED_SECRET: planted },
+			"--frond-ear",
+			dir,
+		);
+		expect(r.err).toBe("");
+		expect(r.code).toBe(0);
+		const env = JSON.parse(readFileSync(seen, "utf8")) as Record<string, string>;
+		expect(JSON.stringify(env)).not.toContain(planted);
+		expect(Object.keys(env).filter((key) => !["PATH", "HOME"].includes(key))).toEqual([]);
+		expect(env.PATH).toBe(process.env.PATH);
+	});
+
+	it("a CLI that hangs is stopped at the timeout: exit 2, saying so", () => {
+		const { dir } = stubCheckout("setTimeout(() => {}, 120_000);");
+		const started = Date.now();
+		const r = check("--frond-ear", dir, "--timeout-ms", "500");
+		expect(Date.now() - started).toBeLessThan(30_000);
+		expect(r.code).toBe(2);
+		expect(r.err).toContain("timed out after 0.5 s");
+	});
+
+	it("the timeout defaults to 30 s, and takes only a positive whole number of ms with --frond-ear", () => {
+		expect(readFileSync(SCRIPT, "utf8")).toMatch(/const DEFAULT_TIMEOUT_MS = 30_000;/);
+		const { dir } = stubCheckout(`process.stdout.write(${JSON.stringify(GOOD_DOC)});`);
+		expect(check("--frond-ear", dir).code).toBe(0);
+		expect(check("--frond-ear", dir, "--timeout-ms", "5000").code).toBe(0);
+		for (const bad of ["0", "-1", "1.5", "soon"]) expect(check("--frond-ear", dir, "--timeout-ms", bad).code).toBe(2);
+		expect(check("--from", output(), "--timeout-ms", "500").code).toBe(2);
+	});
+
+	it("a CLI that exits nonzero is exit 2, never a pass", () => {
+		const { dir } = stubCheckout(`process.stdout.write(${JSON.stringify(GOOD_DOC)});\nprocess.exit(1);`);
+		expect(check("--frond-ear", dir).code).toBe(2);
+	});
+});
+
