@@ -10,7 +10,9 @@
 // - `admitted` is the export's (named in the station's manifest entry), unknown kept unknown;
 // - there is no window start and no arrivals count: the export's `live` is items on air now, a different number, so
 //   arrivals stay unknown rather than borrow it. A stream with anything on air prints as heard;
-// - no host association and no seal: the export knows neither, so host stays blank.
+// - no host association and no seal: the export knows neither, so host stays blank;
+// - names the export withheld (identity-shaped) are counted on the card, never shown, and a reader scope it says is
+//   incomplete (`may_read_complete: false`) stays partial, so a stream outside it reads unknown, never no.
 // Only closed fields are copied, each checked; anything else in the document never reaches the card.
 import { CANTICLE_IDENTIFIER, CANTICLE_STATES } from "./shape";
 import { sanitizeReader, sanitizeStreams, type CardDeck, type CardStation, type ReaderProfile } from "./card";
@@ -54,6 +56,23 @@ function station(raw: unknown, daemonView: boolean): CardStation | null {
 	return { ...base, streams: kept, streams_known: kept.length < given.length ? "partial" : "complete", streams_given: given.length };
 }
 
+/**
+ * How many station names the export withheld (frond-ear's `withheld`, field `deck.stations`): undefined for none,
+ * null when the list can't be read, so a malformed or missing list never reads as none withheld.
+ */
+function stationsWithheld(raw: unknown): number | null | undefined {
+	if (!Array.isArray(raw)) return null;
+	let total = 0;
+	for (const item of raw) {
+		const entry = record(item);
+		if (entry === null) return null;
+		if (entry.field !== "deck.stations") continue;
+		if (typeof entry.count !== "number" || !Number.isInteger(entry.count) || entry.count < 0) return null;
+		total += entry.count;
+	}
+	return total === 0 ? undefined : total;
+}
+
 /** The card's deck and reader from a house export, or null when the document isn't one. */
 export function cardFromExport(raw: unknown): LiveCard | null {
 	const doc = record(raw);
@@ -69,6 +88,7 @@ export function cardFromExport(raw: unknown): LiveCard | null {
 		.map((item) => station(item, daemonView))
 		.filter((item): item is CardStation => item !== null);
 	const windowStart = deck.window_start_ms;
+	const withheld = stationsWithheld(doc.withheld);
 	return {
 		source: doc.source,
 		reader: sanitizeReader(doc.reader),
@@ -76,6 +96,7 @@ export function cardFromExport(raw: unknown): LiveCard | null {
 			now_ms: now,
 			synthetic: false,
 			live_source: doc.source,
+			...(withheld === undefined ? {} : { stations_withheld: withheld }),
 			connected: daemonView && deck.connected === true,
 			window_start_ms: typeof windowStart === "number" && Number.isFinite(windowStart) && windowStart >= 0 ? windowStart : null,
 			stations,

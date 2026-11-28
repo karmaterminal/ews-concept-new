@@ -170,7 +170,11 @@ describe("honesty: readable only on the reader profile's word, unknown stays unk
 			may_read: ["demo-iris:chatter", "bad pattern", "no-colon", "*:*\nevil", 5],
 			hidden: "no",
 		});
-		expect(reader).toEqual({ reader: "ok", payload_text: true, may_read: ["demo-iris:chatter"] });
+		// Four patterns were dropped, so the scope is partial: a miss can't be a definite no.
+		expect(reader).toEqual({ reader: "ok", payload_text: true, may_read: ["demo-iris:chatter"], may_read_left_out: 4 });
+		const line = streamLine(card(DEMO_DECK(NOW), "demo-iris", reader), "forge");
+		expect(line).not.toContain("readable here: yes");
+		expect(card(DEMO_DECK(NOW), "demo-moss", reader)).toContain("readable here: unknown (demo-moss:lighthouse is outside the part of this reader's read scope the card kept; the scope is partial)");
 	});
 
 	it("a withheld station shows a closed seal and no stream lines at all", () => {
@@ -230,5 +234,50 @@ describe("stream knowledge: unknown is not empty, and a partial list is not a to
 	it("an entry dropped as malformed also makes the count partial", () => {
 		const deck = deckFromHouse(DEMO_HOUSE(NOW), { "demo-moss": [{ stream: "ok", arrivals: 2, newest_age_ms: 1, admitted: true }, { stream: "bad name!", arrivals: 5 }] }, START);
 		expect(card(deck, "demo-moss")).toMatch(/arrivals {3}at least 2 since .* \(1 of 2 stream entries not shown\)/);
+	});
+});
+
+describe("a partial read scope is not a total (🌫, ews#14 review): a pattern the card didn't keep never makes a no", () => {
+	const fillers = Array.from({ length: 64 }, (_, i) => `z${i}:other`);
+	const reader = (may_read: string[]) => sanitizeReader({ reader: "many", payload_text: true, may_read });
+	const line = (r: ReaderProfile | null) => streamLine(card(DEMO_DECK(NOW), "demo-moss", r), "lighthouse");
+
+	it("the 65th pattern, past the cap: unknown and says the scope is partial, never no", () => {
+		const r = reader([...fillers, "demo-moss:lighthouse"]);
+		expect(r?.may_read).toHaveLength(64);
+		expect(r?.may_read_left_out).toBe(1);
+		expect(line(r)).toContain("readable here: unknown");
+		expect(line(r)).toContain("the scope is partial");
+		expect(line(r)).not.toContain("readable here: no");
+	});
+
+	it("the same pattern moved first: yes", () => {
+		const r = reader(["demo-moss:lighthouse", ...fillers]);
+		expect(r?.may_read_left_out).toBe(1);
+		expect(line(r)).toContain("readable here: yes");
+	});
+
+	it("control: exactly 64 patterns, none for the stream, is a whole scope and a definite no", () => {
+		const r = reader(fillers);
+		expect(r?.may_read_left_out).toBeUndefined();
+		expect(line(r)).toContain("readable here: no (demo-moss:lighthouse is outside this reader's read scope)");
+	});
+
+	it("a duplicate past the cap is not a lost pattern", () => {
+		expect(reader([...fillers, "z0:other"])?.may_read_left_out).toBeUndefined();
+	});
+
+	it("a source that says its scope is incomplete keeps it partial, count unknown", () => {
+		const r = sanitizeReader({ reader: "src", payload_text: true, may_read: ["demo-iris:*"], may_read_complete: false });
+		expect(r?.may_read_left_out).toBeNull();
+		expect(line(r)).toContain("readable here: unknown");
+		expect(streamLine(card(DEMO_DECK(NOW), "demo-iris", r), "chatter")).toContain("readable here: yes");
+	});
+
+	it("the header says the scope is partial and how much was left out", () => {
+		const text = renderHouseCard(DEMO_DECK(NOW), reader([...fillers, "demo-moss:lighthouse"]));
+		expect(text).toContain("(partial: 1 pattern not kept, so a stream outside it reads unknown)");
+		const unknown = renderHouseCard(DEMO_DECK(NOW), sanitizeReader({ reader: "src", payload_text: true, may_read: [], may_read_complete: false }));
+		expect(unknown).toContain("read scope: none (partial: some patterns not kept, so a stream outside it reads unknown)");
 	});
 });

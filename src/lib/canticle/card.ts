@@ -50,6 +50,8 @@ export type CardDeck = {
 	synthetic: boolean;
 	/** A live deck's source (one ear's `frond-ear house-export`); absent for the demo and the house page. */
 	live_source?: string;
+	/** Station names a live export withheld (identity-shaped); null when how many is unknown. Absent: none. */
+	stations_withheld?: number | null;
 	connected: boolean;
 	/** The collector's real window start (§3.C: "since ‹time›", never "today"); null when unknown. */
 	window_start_ms: number | null;
@@ -62,6 +64,12 @@ export type ReaderProfile = {
 	payload_text: boolean | null;
 	/** `station:stream` patterns this reader may read (`*` for a whole field); null when unknown. */
 	may_read: string[] | null;
+	/**
+	 * Set only when `may_read` is not the whole scope (a partial list is not a total, as for streams): how many
+	 * patterns the card didn't keep (past the cap, or malformed), or null when the source says some were withheld
+	 * and how many is unknown. A stream outside a partial scope reads unknown, never no.
+	 */
+	may_read_left_out?: number | null;
 };
 
 export type StreamReading = { visible: Tri; admitted: Tri; readable: Tri; why: string | null };
@@ -125,28 +133,43 @@ export function deckFromHouse(
 	};
 }
 
+const MAX_READ_PATTERNS = 64;
+/** Entries looked at past the cap, to tell a duplicate from a lost pattern; past this, every one counts as lost. */
+const MAX_READ_ENTRIES = 4096;
+
+function validPattern(pattern: unknown): pattern is string {
+	if (typeof pattern !== "string") return false;
+	const at = pattern.indexOf(":");
+	return at >= 0 && PATTERN_PART.test(pattern.slice(0, at)) && PATTERN_PART.test(pattern.slice(at + 1));
+}
+
 export function sanitizeReader(raw: unknown): ReaderProfile | null {
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
 	const source = raw as Record<string, unknown>;
 	if (typeof source.reader !== "string" || !CANTICLE_IDENTIFIER.test(source.reader)) return null;
 	let may_read: string[] | null = null;
+	let left_out = 0;
 	if (Array.isArray(source.may_read)) {
 		may_read = [];
-		for (const pattern of source.may_read.slice(0, 64)) {
-			if (typeof pattern !== "string") continue;
-			const at = pattern.indexOf(":");
-			if (at < 0) continue;
-			const station = pattern.slice(0, at);
-			const stream = pattern.slice(at + 1);
-			if (PATTERN_PART.test(station) && PATTERN_PART.test(stream) && !may_read.includes(pattern)) {
-				may_read.push(pattern);
+		// Every entry is judged, not just the first 64: a pattern the card can't keep makes the scope partial, so
+		// a stream outside the kept part reads unknown. A duplicate of a kept pattern loses nothing.
+		for (const [i, pattern] of source.may_read.entries()) {
+			if (i >= MAX_READ_ENTRIES) {
+				left_out += source.may_read.length - i;
+				break;
 			}
+			if (!validPattern(pattern)) left_out += 1;
+			else if (may_read.includes(pattern)) continue;
+			else if (may_read.length >= MAX_READ_PATTERNS) left_out += 1;
+			else may_read.push(pattern);
 		}
 	}
+	const withheld = source.may_read_complete === false;
 	return {
 		reader: source.reader,
 		payload_text: typeof source.payload_text === "boolean" ? source.payload_text : null,
 		may_read,
+		...(may_read === null ? {} : withheld ? { may_read_left_out: null } : left_out > 0 ? { may_read_left_out: left_out } : {}),
 	};
 }
 
@@ -200,7 +223,8 @@ export function streamReading(
 		if (reader.payload_text === null) unknowns.push("this session's payload-text setting is unknown");
 		if (reader.may_read === null) unknowns.push("this reader's read scope is unknown");
 		else if (!inScope(reader.may_read, station.name, stream)) {
-			noes.push(`${station.name}:${stream} is outside this reader's read scope`);
+			if (reader.may_read_left_out === undefined) noes.push(`${station.name}:${stream} is outside this reader's read scope`);
+			else unknowns.push(`${station.name}:${stream} is outside the part of this reader's read scope the card kept; the scope is partial`);
 		}
 	}
 
@@ -269,6 +293,13 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 	return lines.join("\n");
 }
 
+function scopePartial(reader: ReaderProfile): string {
+	const n = reader.may_read_left_out;
+	if (n === undefined || reader.may_read === null) return "";
+	const what = n === null ? "some patterns" : `${n} pattern${n === 1 ? "" : "s"}`;
+	return ` (partial: ${what} not kept, so a stream outside it reads unknown)`;
+}
+
 export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): string {
 	const head = [
 		`HOUSE CARD${deck.synthetic ? " · SYNTHETIC — DEMO DATA" : deck.live_source !== undefined ? ` · LIVE (this ear) · ${deck.live_source}` : ""}`,
@@ -277,7 +308,12 @@ export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): s
 		`  collector  ${deck.connected ? "linked" : "no link: every station is unobserved, not offline"}`,
 		reader === null
 			? "  reader     none given: readable here stays unknown"
-			: `  reader     ${reader.reader} · payload text: ${reader.payload_text === null ? "unknown" : reader.payload_text ? "on" : "off"} · read scope: ${reader.may_read === null ? "unknown" : reader.may_read.length === 0 ? "none" : reader.may_read.join(", ")}`,
+			: `  reader     ${reader.reader} · payload text: ${reader.payload_text === null ? "unknown" : reader.payload_text ? "on" : "off"} · read scope: ${reader.may_read === null ? "unknown" : reader.may_read.length === 0 ? "none" : reader.may_read.join(", ")}${scopePartial(reader)}`,
+		...(deck.stations_withheld === undefined
+			? []
+			: [
+					`  withheld   ${deck.stations_withheld === null ? "an unknown number of" : deck.stations_withheld} station name${deck.stations_withheld === 1 ? "" : "s"} the export withheld (identity-shaped or not identifiers)`,
+				]),
 	];
 	const cards = deck.stations.map((station) => renderStationCard(station, deck, reader));
 	return [head.join("\n"), ...cards].join("\n\n") + "\n";

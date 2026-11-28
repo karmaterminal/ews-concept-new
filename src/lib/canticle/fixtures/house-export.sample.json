@@ -9,10 +9,11 @@
     "reader": "fixture-ear",
     "payload_text": true,
     "may_read": ["fixture-scribe:chatter", "fixture-scribe:facts", "*:ops.fleet", "fixture-dark:chatter"],
+    "may_read_complete": true,
     "basis": {
       "canticle": "enabled",
       "hear": "payload text of tuned streams",
-      "push": { "mode": "off", "style": "records", "muted": false, "stations": [{ "station": "fixture-scribe", "mode": "immediate" }], "key_scoped": 0 }
+      "push": { "mode": "off", "style": "records", "muted": false, "stations": [{ "station": "fixture-scribe", "mode": "immediate" }] }
     }
   },
   "deck": {
@@ -59,6 +60,7 @@
         ]
       }
     ],
-    "left_out": { "unnamed_stations": 0, "untuned_more": 0, "truncated": false, "refused_names": 0 }
-  }
+    "left_out": { "untuned_more": 0, "truncated": false }
+  },
+  "withheld": []
 }

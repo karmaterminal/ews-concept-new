@@ -182,6 +182,43 @@ describe("the adapter takes only a house export, and only its closed fields", ()
 	});
 });
 
+describe("the export's partial scope and withheld names (🌫, #147 and ews#14 reviews)", () => {
+	it("🌫's case end to end: 64 patterns, then the readable one, never reads as a definite no", () => {
+		const fillers = Array.from({ length: 64 }, (_, i) => `z${i}:other`);
+		const last = edited((d) => (d.reader.may_read = [...fillers, "fixture-lighthouse:lighthouse"]));
+		const first = edited((d) => (d.reader.may_read = ["fixture-lighthouse:lighthouse", ...fillers]));
+		const lastLine = streamLine(stationText("fixture-lighthouse", last), "lighthouse");
+		expect(lastLine).toContain("readable here: unknown");
+		expect(lastLine).not.toContain("readable here: no");
+		expect(streamLine(stationText("fixture-lighthouse", first), "lighthouse")).toContain("readable here: yes");
+	});
+
+	it("an export whose scope lost a withheld pattern reads a miss as unknown, a hit as yes", () => {
+		const raw = edited((d) => (d.reader.may_read_complete = false));
+		expect(streamLine(stationText("fixture-lighthouse", raw), "lighthouse")).toContain("readable here: unknown");
+		expect(streamLine(stationText("fixture-scribe", raw), "chatter")).toContain("readable here: yes");
+	});
+
+	it("says how many station names the export withheld, never which", () => {
+		const raw = edited((d) => {
+			d.withheld = [
+				{ field: "deck.stations", reason: "discord-id shape", count: 2 },
+				{ field: "deck.stations", reason: "key-id shape", count: 1 },
+				{ field: "reader.may_read", reason: "key-id shape", count: 1 },
+			];
+		});
+		const { deck, reader } = live(raw);
+		expect(renderHouseCard(deck, reader)).toContain("  withheld   3 station names the export withheld (identity-shaped or not identifiers)");
+		const none = live();
+		expect(renderHouseCard(none.deck, none.reader)).not.toContain("withheld   ");
+	});
+
+	it("a malformed withheld list can't be read as none withheld", () => {
+		const { deck } = live(edited((d) => (d.withheld = [{ field: "deck.stations", reason: "x", count: -1 }])));
+		expect(renderHouseCard(deck, null)).toContain("  withheld   an unknown number of station names the export withheld");
+	});
+});
+
 describe("render-house-card --from", () => {
 	const script = join(import.meta.dirname, "..", "..", "..", "scripts", "render-house-card.mjs");
 	const run = (...args: string[]) => execFileSync(process.execPath, [script, ...args], { encoding: "utf8" });
