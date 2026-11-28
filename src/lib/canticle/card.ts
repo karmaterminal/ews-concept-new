@@ -21,6 +21,11 @@ export type CardStream = {
 	newest_age_ms: number | null;
 	/** Whether the manifest grant admits this stream; null when the display can't say. */
 	admitted: boolean | null;
+	/**
+	 * A live export couldn't count what is on air here (its `live` was null: a held or muted board, or a stream its
+	 * walk didn't reach). Never printed as quiet.
+	 */
+	on_air_unknown?: true;
 };
 
 export type CardStation = {
@@ -38,11 +43,41 @@ export type CardStation = {
 	streams_known: "complete" | "unknown" | "partial";
 	/** Entries given for this station, before any were left out; null when unknown. */
 	streams_given: number | null;
+	/**
+	 * Only when no beacon age is given (an ear's export): whether the collector's own presence word says the beacon is
+	 * heard now. Never inferred, and never stands in for an age.
+	 */
+	beacon_heard?: boolean;
+	/**
+	 * The station's state is unknown because the collector's presence table doesn't hold it: that table is capped
+	 * and empty before its first snapshot, so absence is no evidence of "not heard" (🌿, ews#14).
+	 */
+	presence_absent?: true;
 };
 
 export type CardDeck = {
 	now_ms: number;
 	synthetic: boolean;
+	/** A live deck's source (one ear's `frond-ear house-export`); absent for the demo and the house page. */
+	live_source?: string;
+	/** Station names a live export withheld (identity-shaped); null when how many is unknown. Absent: none. */
+	stations_withheld?: number | null;
+	/** Stations the card left out: past its cap, or malformed. Absent: none. */
+	stations_not_shown?: number;
+	/**
+	 * A live export's coverage: whether its guide walk was whole, and the gaps it named (closed names with counts;
+	 * `unreadable` counts entries that weren't one). Null: the export gave no gap list. Absent: not a live deck.
+	 */
+	coverage?: {
+		walk: "complete" | "partial" | null;
+		gaps: Array<{ name: string; count: number }>;
+		unreadable: number;
+		/**
+		 * The export's `left_out`, kept apart from the walk (🌫): a whole walk can sit beside a capped untuned list.
+		 * Null when the export didn't say, or said it in a way the card can't read.
+		 */
+		left_out: { untuned_more: number; untuned_listed: number | null; truncated: boolean } | null;
+	} | null;
 	connected: boolean;
 	/** The collector's real window start (§3.C: "since ‹time›", never "today"); null when unknown. */
 	window_start_ms: number | null;
@@ -55,6 +90,12 @@ export type ReaderProfile = {
 	payload_text: boolean | null;
 	/** `station:stream` patterns this reader may read (`*` for a whole field); null when unknown. */
 	may_read: string[] | null;
+	/**
+	 * Set only when `may_read` is not the whole scope (a partial list is not a total, as for streams): how many
+	 * patterns the card didn't keep (past the cap, or malformed) plus those the source withheld (`may_read_withheld`),
+	 * or null when how many is unknown. A stream outside a partial scope reads unknown, never no.
+	 */
+	may_read_left_out?: number | null;
 };
 
 export type StreamReading = { visible: Tri; admitted: Tri; readable: Tri; why: string | null };
@@ -68,7 +109,7 @@ function nonNegativeNumber(value: unknown): number | null {
 
 const MAX_CARD_STREAMS = 16;
 
-function sanitizeStreams(raw: unknown): CardStream[] | null {
+export function sanitizeStreams(raw: unknown): CardStream[] | null {
 	if (!Array.isArray(raw)) return null;
 	const seen = new Set<string>();
 	const out: CardStream[] = [];
@@ -84,6 +125,7 @@ function sanitizeStreams(raw: unknown): CardStream[] | null {
 			arrivals: arrivals === null ? null : Math.floor(arrivals),
 			newest_age_ms: nonNegativeNumber(source.newest_age_ms),
 			admitted: typeof source.admitted === "boolean" ? source.admitted : null,
+			...(source.on_air_unknown === true ? { on_air_unknown: true as const } : {}),
 		});
 	}
 	return out.sort((a, b) => (a.stream < b.stream ? -1 : a.stream > b.stream ? 1 : 0));
@@ -118,28 +160,50 @@ export function deckFromHouse(
 	};
 }
 
+const MAX_READ_PATTERNS = 64;
+/** Entries looked at past the cap, to tell a duplicate from a lost pattern; past this, every one counts as lost. */
+const MAX_READ_ENTRIES = 4096;
+
+function validPattern(pattern: unknown): pattern is string {
+	if (typeof pattern !== "string") return false;
+	const at = pattern.indexOf(":");
+	return at >= 0 && PATTERN_PART.test(pattern.slice(0, at)) && PATTERN_PART.test(pattern.slice(at + 1));
+}
+
 export function sanitizeReader(raw: unknown): ReaderProfile | null {
 	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
 	const source = raw as Record<string, unknown>;
 	if (typeof source.reader !== "string" || !CANTICLE_IDENTIFIER.test(source.reader)) return null;
 	let may_read: string[] | null = null;
+	let left_out = 0;
 	if (Array.isArray(source.may_read)) {
 		may_read = [];
-		for (const pattern of source.may_read.slice(0, 64)) {
-			if (typeof pattern !== "string") continue;
-			const at = pattern.indexOf(":");
-			if (at < 0) continue;
-			const station = pattern.slice(0, at);
-			const stream = pattern.slice(at + 1);
-			if (PATTERN_PART.test(station) && PATTERN_PART.test(stream) && !may_read.includes(pattern)) {
-				may_read.push(pattern);
+		// Every entry is judged, not just the first 64: a pattern the card can't keep makes the scope partial, so
+		// a stream outside the kept part reads unknown. A duplicate of a kept pattern loses nothing.
+		for (const [i, pattern] of source.may_read.entries()) {
+			if (i >= MAX_READ_ENTRIES) {
+				left_out += source.may_read.length - i;
+				break;
 			}
+			if (!validPattern(pattern)) left_out += 1;
+			else if (may_read.includes(pattern)) continue;
+			else if (may_read.length >= MAX_READ_PATTERNS) left_out += 1;
+			else may_read.push(pattern);
 		}
 	}
+	// What the source itself withheld (frond-ear's house-export: identity-shaped tune patterns): its count is added
+	// to the card's own. A source that says its scope is incomplete without a usable count, or gives a count that
+	// isn't one, leaves how many unknown. Nothing a source says can make a partial scope whole.
+	const flagged = source.may_read_complete === false;
+	const given = source.may_read_withheld;
+	const counted = typeof given === "number" && Number.isInteger(given) && given >= 0 ? given : undefined;
+	const unknownCount = (given !== undefined && counted === undefined) || (flagged && (counted === undefined || counted === 0));
+	const total = left_out + (counted ?? 0);
 	return {
 		reader: source.reader,
 		payload_text: typeof source.payload_text === "boolean" ? source.payload_text : null,
 		may_read,
+		...(may_read === null ? {} : unknownCount ? { may_read_left_out: null } : total > 0 ? { may_read_left_out: total } : {}),
 	};
 }
 
@@ -156,8 +220,20 @@ function inScope(may_read: string[], station: string, stream: string): boolean {
 export function stationVisible(station: CardStation, deck: CardDeck): { visible: Tri; why: string } {
 	if (!deck.connected) return { visible: "unknown", why: "the collector has no link, so this is unobserved, not offline" };
 	if (NOT_HEARD_STATES.has(station.state)) return { visible: "no", why: "its beacon is not heard here" };
-	if (station.state === "unknown") return { visible: "unknown", why: "receive is degraded or a gap" };
-	if (station.beacon_age_ms === null) return { visible: "unknown", why: "no beacon age" };
+	if (station.state === "unknown") {
+		return {
+			visible: "unknown",
+			why:
+				station.presence_absent === true
+					? "it is absent from the ear's presence table, which is capped and empty before its first snapshot: unknown, not unheard"
+					: "receive is degraded or a gap",
+		};
+	}
+	if (station.beacon_age_ms === null) {
+		return station.beacon_heard === true
+			? { visible: "yes", why: "its presence word says its beacon is heard; no beacon age given" }
+			: { visible: "unknown", why: "no beacon age" };
+	}
 	if (carrierLevel(station.beacon_age_ms) <= 0) return { visible: "no", why: "its last beacon is stale" };
 	return { visible: "yes", why: "its beacon is heard" };
 }
@@ -189,7 +265,8 @@ export function streamReading(
 		if (reader.payload_text === null) unknowns.push("this session's payload-text setting is unknown");
 		if (reader.may_read === null) unknowns.push("this reader's read scope is unknown");
 		else if (!inScope(reader.may_read, station.name, stream)) {
-			noes.push(`${station.name}:${stream} is outside this reader's read scope`);
+			if (reader.may_read_left_out === undefined) noes.push(`${station.name}:${stream} is outside this reader's read scope`);
+			else unknowns.push(`${station.name}:${stream} is outside the part of this reader's read scope the card kept; the scope is partial`);
 		}
 	}
 
@@ -211,10 +288,23 @@ function age(ms: number | null): string {
 
 function streamsLine(station: CardStation, heard: CardStream[]): string {
 	if (station.streams_known === "unknown") return "unknown (no stream knowledge for this station)";
-	const names = heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard";
-	if (station.streams_known !== "partial") return names;
-	const left = (station.streams_given ?? station.streams.length) - station.streams.length;
-	return `${names} (+${left} not shown)`;
+	// An empty list that isn't known whole was never heard as quiet: it lists nothing, that is all.
+	if (station.streams_known === "partial" && station.streams.length === 0) return "none listed (more may exist)";
+	// A count the export couldn't give is never "none heard" (🌿, ews#14 W-1).
+	const unknown = station.streams.filter((item) => item.on_air_unknown === true && !heard.includes(item)).length;
+	const names = heard.map((item) => item.stream).join(", ");
+	const text =
+		unknown > 0
+			? heard.length === 0
+				? "not known (the board was held, muted or not read)"
+				: `${names}; ${unknown} more not known`
+			: heard.length > 0
+				? names
+				: "none heard";
+	// The not-shown suffix stays whatever the counts say (🌿 round 3).
+	if (station.streams_known !== "partial") return text;
+	if (station.streams_given === null) return `${text} (more may exist)`;
+	return `${text} (+${station.streams_given - station.streams.length} not shown)`;
 }
 
 function arrivalsLine(station: CardStation, deck: CardDeck): string {
@@ -223,7 +313,8 @@ function arrivalsLine(station: CardStation, deck: CardDeck): string {
 	if (station.streams.some((item) => item.arrivals === null)) return "unknown";
 	const total = station.streams.reduce((sum, item) => sum + (item.arrivals ?? 0), 0);
 	if (station.streams_known === "partial") {
-		const given = station.streams_given ?? station.streams.length;
+		if (station.streams_given === null) return `at least ${total} since ${iso(deck.window_start_ms)} (more stream entries may exist)`;
+		const given = station.streams_given;
 		return `at least ${total} since ${iso(deck.window_start_ms)} (${given - station.streams.length} of ${given} stream entries not shown)`;
 	}
 	return `${total} since ${iso(deck.window_start_ms)}`;
@@ -242,7 +333,7 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 		deck.connected
 			? `  state      ${station.state} · ${stateGloss(station.state)}`
 			: "  state      unobserved (the collector has no link)",
-		`  beacon     ${deck.connected ? age(station.beacon_age_ms) : "unknown (no link)"}`,
+		`  beacon     ${!deck.connected ? "unknown (no link)" : station.beacon_age_ms === null && station.beacon_heard === true ? "heard (no age in this export)" : age(station.beacon_age_ms)}`,
 		`  arrivals   ${arrivalsLine(station, deck)}`,
 		`  streams    ${streamsLine(station, heard)}`,
 		`  station visible: ${seen.visible} (${seen.why})`,
@@ -257,15 +348,51 @@ export function renderStationCard(station: CardStation, deck: CardDeck, reader: 
 	return lines.join("\n");
 }
 
+function coverageLine(coverage: NonNullable<CardDeck["coverage"]> | null): string {
+	if (coverage === null) return "unknown (the export gave no gap list)";
+	const named = coverage.gaps.map((gap) => `${gap.name} ×${gap.count}`);
+	if (coverage.unreadable > 0) named.push(`+${coverage.unreadable} unreadable`);
+	const left = coverage.left_out;
+	if (left === null) named.push("what was left out is unknown");
+	else {
+		if (left.untuned_more > 0) {
+			named.push(
+				left.untuned_listed === null
+					? `untuned: ${left.untuned_more} left out`
+					: `untuned: ${left.untuned_listed} shown, ${left.untuned_more} left out`,
+			);
+		}
+		if (left.truncated) named.push("guide truncated");
+	}
+	if (named.length === 0 && coverage.walk === "complete") return "none (walk complete)";
+	return `walk ${coverage.walk ?? "unknown"} · ${named.length === 0 ? "no gap named" : named.join(", ")}`;
+}
+
+function scopePartial(reader: ReaderProfile): string {
+	const n = reader.may_read_left_out;
+	if (n === undefined || reader.may_read === null) return "";
+	const what = n === null ? "some patterns" : `${n} pattern${n === 1 ? "" : "s"}`;
+	return ` (partial: ${what} not kept, so a scope miss alone is unknown)`;
+}
+
 export function renderHouseCard(deck: CardDeck, reader: ReaderProfile | null): string {
 	const head = [
-		`HOUSE CARD${deck.synthetic ? " · SYNTHETIC — DEMO DATA" : ""}`,
+		`HOUSE CARD${deck.synthetic ? " · SYNTHETIC — DEMO DATA" : deck.live_source !== undefined ? ` · LIVE (this ear) · ${deck.live_source}` : ""}`,
 		`  as of      ${iso(deck.now_ms)}`,
 		`  window     ${deck.window_start_ms === null ? "start unknown" : `since ${iso(deck.window_start_ms)} (memory only)`}`,
 		`  collector  ${deck.connected ? "linked" : "no link: every station is unobserved, not offline"}`,
 		reader === null
-			? "  reader     none given: readable here stays unknown"
-			: `  reader     ${reader.reader} · payload text: ${reader.payload_text === null ? "unknown" : reader.payload_text ? "on" : "off"} · read scope: ${reader.may_read === null ? "unknown" : reader.may_read.length === 0 ? "none" : reader.may_read.join(", ")}`,
+			? "  reader     none given: without one, readable here is never yes (a known denial still reads no)"
+			: `  reader     ${reader.reader} · payload text: ${reader.payload_text === null ? "unknown" : reader.payload_text ? "on" : "off"} · read scope: ${reader.may_read === null ? "unknown" : reader.may_read.length === 0 ? "none" : reader.may_read.join(", ")}${scopePartial(reader)}`,
+		...(deck.stations_withheld === undefined
+			? []
+			: [
+					`  withheld   ${deck.stations_withheld === null ? "an unknown number of" : deck.stations_withheld} station name${deck.stations_withheld === 1 ? "" : "s"} the export withheld (identity-shaped or not identifiers)`,
+				]),
+		...(deck.stations_not_shown === undefined || deck.stations_not_shown === 0
+			? []
+			: [`  not shown  ${deck.stations_not_shown} station${deck.stations_not_shown === 1 ? "" : "s"} (past the card's 64, or malformed)`]),
+		...(deck.coverage === undefined ? [] : [`  gaps       ${coverageLine(deck.coverage)}`]),
 	];
 	const cards = deck.stations.map((station) => renderStationCard(station, deck, reader));
 	return [head.join("\n"), ...cards].join("\n\n") + "\n";

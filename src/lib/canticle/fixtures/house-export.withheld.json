@@ -1,0 +1,70 @@
+{
+  "kind": "frond-house-export/0",
+  "source": "frond-ear bfc8794 ear fixture-ear",
+  "ear": "fixture-ear",
+  "at": "2026-11-28T05:43:14.601Z",
+  "now_ms": 1795844594601,
+  "look": "names and state words only: no payload text, item content, key, Discord id, path or token",
+  "reader": {
+    "reader": "fixture-ear",
+    "payload_text": true,
+    "may_read": [
+      "fixture-scribe:chatter"
+    ],
+    "may_read_complete": false,
+    "may_read_withheld": 1,
+    "basis": {
+      "canticle": "enabled",
+      "hear": "payload text of tuned streams",
+      "push": {
+        "mode": "off",
+        "style": "records",
+        "muted": false,
+        "stations": []
+      }
+    }
+  },
+  "deck": {
+    "view": "config",
+    "listener": "not asked",
+    "connected": false,
+    "window_start_ms": null,
+    "manifest": "read",
+    "stations": [
+      {
+        "name": "fixture-scribe",
+        "presence": null,
+        "verification": null,
+        "in_manifest": true,
+        "streams_known": "partial",
+        "streams": [
+          {
+            "stream": "chatter",
+            "tuned": true,
+            "admitted": true,
+            "live": null,
+            "newest_age_ms": null
+          },
+          {
+            "stream": "facts",
+            "tuned": false,
+            "admitted": true,
+            "live": null,
+            "newest_age_ms": null
+          }
+        ]
+      }
+    ],
+    "left_out": {
+      "untuned_more": 0,
+      "truncated": false
+    }
+  },
+  "withheld": [
+    {
+      "field": "reader.may_read",
+      "reason": "key-id shape",
+      "count": 1
+    }
+  ]
+}

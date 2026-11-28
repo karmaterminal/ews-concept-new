@@ -7,7 +7,8 @@ say before their row goes live.
 
 **Status as of 2026-11-26:** partly built. The helicorder (§3.B) has a first page on `thornfield`
 (`src/routes/canticle/house/+page.svelte`, `src/lib/canticle/house.ts`). The house card (§3.C.1) prints the
-`SYNTHETIC` deck as text (`src/lib/canticle/card.ts`, `pnpm --silent house-card`). The rest of this document is plan.
+`SYNTHETIC` deck as text (`src/lib/canticle/card.ts`, `pnpm --silent house-card`), or one ear's own live view with
+`--from` a frond-ear `house-export`. The rest of this document is plan.
 
 ## 1. The rules, before any page
 
@@ -212,8 +213,22 @@ their last values.
     chatter     station visible: no · stream admitted: yes · readable here: yes (when heard)
 ```
 
-It renders the `SYNTHETIC` demo only. A live card waits for the same Q6 answer as the live deck, and for a reader
-profile taken from a session's real settings instead of passed by hand.
+By default it renders the `SYNTHETIC` demo. `--from <export.json>` renders one ear's own view instead, from frond-ear's
+`house-export --ear <name>` (`src/lib/canticle/house-export.ts`), headed `LIVE (this ear)` with the export's source.
+That export takes the reader profile from the ear's real config: its `canticle.tune` as the read scope, and payload text
+on whenever `hear` shows any (delivery gates only pushes). Its deck is the manifest's stations and the tune's, plus
+the daemon's `status` presence table and every `canticle_guide` row, tuned and untuned, as names and state words.
+It has no beacon age and no window start, so a carrier-up presence word reads as visible with no age, and arrivals stay
+unknown. Only an observed presence word says visible or not. A station the presence table doesn't hold reads unknown,
+since that table is capped and empty before its first snapshot. The export's guide gaps (`host_mute`, `records_lost`, a
+broken walk and so on) show on the card as names and counts. An untuned list the export capped is disclosed apart
+from the walk ("untuned: 50 shown, 10 left out"), since a whole walk can sit beside it. A live count the export
+couldn't give (a held or muted board, or a stream its walk didn't reach) prints "not known", never "none heard". The guide's live count (on air now) is a different number, so the card doesn't borrow it. A read scope is a
+list like the streams, and a partial list is not a total. That holds when the card keeps only 64 patterns, drops a
+malformed one, or the export withheld an identity-shaped one or didn't say its scope is complete. A scope miss alone
+then reads unknown, never no. A denial known some other way (the grant, or payload text off) still reads no, and the
+reader line says the scope is partial. Station names the export withheld are counted on the card, never
+shown. It is one ear reading its own view. The house page's live deck still waits for the Q6 answer.
 
 **Against frond-ear's `canticle_guide`** (frond-ear `d808392`, `src/canticle/guide.ts`). The guide is one row per tuned
 station:stream on air in one ear's listener. It is metadata only and never says whether a session may read a
