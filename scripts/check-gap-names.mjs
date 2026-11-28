@@ -9,7 +9,7 @@
 // reaches it. It runs in its own process group, and a CLI that hasn't finished at the limit is stopped with that whole
 // group (🌿 on ews#17): SIGTERM, then SIGKILL after a short grace. That reaches the CLI and its
 // descendants still in its process group; one that left the group (its own session) is out of reach (🌫). A CLI that
-// prints more than 1 MiB is stopped the same way.
+// writes more than 1 MiB to stdout is stopped the same way; its stderr is drained and not counted.
 // Exit 0: every name and every push class match. Exit 1: they differ (each difference is printed). Exit 2: the input
 // isn't frond-ear's gap-names document, or the checkout couldn't run it, or it timed out.
 // Needs Node 23.6 or later (type stripping).
@@ -25,8 +25,8 @@ const USAGE = "usage: check-gap-names (--frond-ear <checkout> [--timeout-ms <n>]
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** All the CLI needs: PATH to find git for its revision word, HOME for git's own config. */
 const CHILD_ENV_KEYS = ["PATH", "HOME"];
-/** The most the CLI may print, in bytes (🌫 on ews#17): spawnSync's old default bound, kept explicit. */
-const MAX_OUTPUT_BYTES = 1024 * 1024;
+/** The most the CLI may write to stdout, in bytes (🌫 on ews#17): spawnSync's old default bound, kept explicit. */
+const MAX_STDOUT_BYTES = 1024 * 1024;
 /** Between SIGTERM and SIGKILL to the CLI's process group on a timeout. */
 const KILL_GRACE_MS = 1_000;
 
@@ -41,7 +41,8 @@ function signalGroup(pid, signal) {
 
 /**
  * Runs the checkout's CLI in its own process group. Resolves with its stdout and exit status; with `timedOut` once
- * the group was stopped at the limit; or with `tooBig` once it printed past MAX_OUTPUT_BYTES and the group was killed.
+ * the group was stopped at the limit; or with `tooBig` once its stdout passed MAX_STDOUT_BYTES and the group was
+ * killed.
  * Stopped, it doesn't wait for pipes a process outside the group may still hold.
  */
 function runCli(where, env, timeoutMs) {
@@ -70,7 +71,7 @@ function runCli(where, env, timeoutMs) {
 		child.stdout.on("data", (chunk) => {
 			if (done) return;
 			bytes += chunk.length;
-			if (bytes > MAX_OUTPUT_BYTES) {
+			if (bytes > MAX_STDOUT_BYTES) {
 				signalGroup(child.pid, "SIGKILL");
 				finish({ tooBig: true });
 				return;
@@ -124,7 +125,7 @@ if (how === "--from") {
 	const run = await runCli(where, env, timeoutMs);
 	if (run.tooBig) {
 		refuse(
-			`${where}: \`node src/cli.ts house-export --gap-names\` printed more than ${MAX_OUTPUT_BYTES / 1024 / 1024} MiB and was stopped`,
+			`${where}: \`node src/cli.ts house-export --gap-names\` printed more than ${MAX_STDOUT_BYTES / 1024 / 1024} MiB on stdout and was stopped`,
 		);
 	}
 	if (run.timedOut) {

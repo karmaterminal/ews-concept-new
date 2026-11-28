@@ -222,7 +222,7 @@ describe("🌫 on ews#17: an output cap, and what a timeout stops", () => {
 	/** GOOD_DOC padded with JSON whitespace to `bytes`: still a valid document. */
 	const padded = (bytes: number) => GOOD_DOC + " ".repeat(bytes - Buffer.byteLength(GOOD_DOC));
 
-	it("a CLI that prints 2 MiB (a valid document) and exits 0 is stopped at the 1 MiB cap: exit 2, and its group is gone", async () => {
+	it("a CLI that prints 2 MiB on stdout (a valid document) and exits 0 is stopped at the 1 MiB stdout cap: exit 2, and its group is gone", async () => {
 		const { dir, seen } = stubCheckout(
 			[
 				`import { spawn } from "node:child_process";`,
@@ -238,7 +238,7 @@ describe("🌫 on ews#17: an output cap, and what a timeout stops", () => {
 			const seenPids = JSON.parse(readFileSync(seen, "utf8")) as { cli: number; grandchild: number };
 			pids = [seenPids.cli, seenPids.grandchild];
 			expect(r.code).toBe(2);
-			expect(r.err).toContain("printed more than 1 MiB and was stopped");
+			expect(r.err).toContain("printed more than 1 MiB on stdout and was stopped");
 			expect(await settle(pids)).toEqual([]);
 		} finally {
 			for (const pid of pids) if (running(pid)) process.kill(pid, "SIGKILL");
@@ -252,8 +252,14 @@ describe("🌫 on ews#17: an output cap, and what a timeout stops", () => {
 		expect(r.code).toBe(0);
 	});
 
-	it("the cap is 1 MiB of bytes", () => {
-		expect(readFileSync(SCRIPT, "utf8")).toMatch(/const MAX_OUTPUT_BYTES = 1024 \* 1024;/);
+	it("the cap is 1 MiB of stdout bytes, and only stdout is counted", () => {
+		const script = readFileSync(SCRIPT, "utf8");
+		expect(script).toMatch(/const MAX_STDOUT_BYTES = 1024 \* 1024;/);
+		const docs = readFileSync(join(import.meta.dirname, "..", "..", "..", "docs", "frond-house.md"), "utf8");
+		for (const text of [script, docs]) expect(text).not.toMatch(/MAX_OUTPUT_BYTES|[Oo]utput past 1 MiB|prints more than 1 MiB is/);
+		// stderr is drained, not counted: 2 MiB of it beside a good stdout still passes.
+		const { dir } = stubCheckout(`process.stderr.write("x".repeat(2 * 1024 * 1024));\nprocess.stdout.write(${JSON.stringify(GOOD_DOC)});`);
+		expect(check("--frond-ear", dir).code).toBe(0);
 	});
 
 	it("a timeout stops descendants still in the CLI's process group, and says only that", async () => {
