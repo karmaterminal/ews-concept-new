@@ -278,6 +278,8 @@ describe("a partial read scope is not a total (🌫, ews#14 review): a pattern t
 		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b", "bad"], may_read_complete: false, may_read_withheld: 2 })?.may_read_left_out).toBe(3);
 		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_complete: false, may_read_withheld: -1 })?.may_read_left_out).toBeNull();
 		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_complete: false })?.may_read_left_out).toBeNull();
+		// A count that isn't one makes how many unknown, flag or no flag.
+		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_withheld: "1" })?.may_read_left_out).toBeNull();
 		// A count with no flag, or the flag saying complete, still can't make the scope whole.
 		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_complete: true, may_read_withheld: 1 })?.may_read_left_out).toBe(1);
 		expect(sanitizeReader({ reader: "src", payload_text: true, may_read: ["a:b"], may_read_withheld: 0 })?.may_read_left_out).toBeUndefined();
