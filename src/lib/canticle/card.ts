@@ -288,19 +288,23 @@ function age(ms: number | null): string {
 
 function streamsLine(station: CardStation, heard: CardStream[]): string {
 	if (station.streams_known === "unknown") return "unknown (no stream knowledge for this station)";
-	// A count the export couldn't give is never "none heard" (🌿, ews#14 W-1).
-	const unknown = station.streams.filter((item) => item.on_air_unknown === true && !heard.includes(item)).length;
-	if (unknown > 0) {
-		return heard.length === 0
-			? "not known (the board was held, muted or not read)"
-			: `${heard.map((item) => item.stream).join(", ")}; ${unknown} more not known`;
-	}
 	// An empty list that isn't known whole was never heard as quiet: it lists nothing, that is all.
 	if (station.streams_known === "partial" && station.streams.length === 0) return "none listed (more may exist)";
-	const names = heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard";
-	if (station.streams_known !== "partial") return names;
-	if (station.streams_given === null) return `${names} (more may exist)`;
-	return `${names} (+${station.streams_given - station.streams.length} not shown)`;
+	// A count the export couldn't give is never "none heard" (🌿, ews#14 W-1).
+	const unknown = station.streams.filter((item) => item.on_air_unknown === true && !heard.includes(item)).length;
+	const names = heard.map((item) => item.stream).join(", ");
+	const text =
+		unknown > 0
+			? heard.length === 0
+				? "not known (the board was held, muted or not read)"
+				: `${names}; ${unknown} more not known`
+			: heard.length > 0
+				? names
+				: "none heard";
+	// The not-shown suffix stays whatever the counts say (🌿 round 3).
+	if (station.streams_known !== "partial") return text;
+	if (station.streams_given === null) return `${text} (more may exist)`;
+	return `${text} (+${station.streams_given - station.streams.length} not shown)`;
 }
 
 function arrivalsLine(station: CardStation, deck: CardDeck): string {

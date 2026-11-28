@@ -412,3 +412,32 @@ describe("end to end: a held board (frond-ear's own producer under host mute)", 
 		expect(text).toContain("streams    none listed (more may exist)");
 	});
 });
+
+describe("🌿 round 3 should-fix: the not-shown suffix survives unknown counts", () => {
+	it("a list past the card's 16 keeps '+N not shown' when a stream's count is unknown", () => {
+		const raw = edited((d) => {
+			d.deck.stations[3].streams = Array.from({ length: 17 }, (_, i) => ({
+				stream: `s${String(i).padStart(2, "0")}`,
+				tuned: true,
+				admitted: true,
+				live: i === 0 ? null : 1,
+				newest_age_ms: i === 0 ? null : 1000,
+			}));
+		});
+		const text = stationText("fixture-scribe", raw);
+		expect(text).toMatch(/streams {4}s01, .*; 1 more not known \(\+1 not shown\)/);
+	});
+
+	it("and when every count is unknown", () => {
+		const raw = edited((d) => {
+			d.deck.stations[3].streams = Array.from({ length: 17 }, (_, i) => ({
+				stream: `s${String(i).padStart(2, "0")}`,
+				tuned: true,
+				admitted: true,
+				live: null,
+				newest_age_ms: null,
+			}));
+		});
+		expect(stationText("fixture-scribe", raw)).toContain("streams    not known (the board was held, muted or not read) (+1 not shown)");
+	});
+});
