@@ -156,6 +156,22 @@ describe("the adapter takes only a house export, and only its closed fields", ()
 		expect(text).toContain("collector  no link: every station is unobserved, not offline");
 		expect(text).not.toContain("not_heard");
 		expect(stationText("fixture-dark", raw)).toContain("station visible: unknown (the collector has no link");
+		// With no daemon view a missing presence word is unknown, not "not heard".
+		expect(deck.stations.find((item) => item.name === "fixture-dark")?.state).toBe("unknown");
+	});
+
+	it("a config-only export that claims a link still reads unobserved: only a daemon view links", () => {
+		const raw = edited((d) => (d.deck.view = "config"));
+		const { deck, reader } = live(raw);
+		expect(deck.connected).toBe(false);
+		expect(renderHouseCard(deck, reader)).toContain("collector  no link: every station is unobserved, not offline");
+	});
+
+	it("never borrows the guide's live count as arrivals, even with a window start", () => {
+		const raw = edited((d) => (d.deck.window_start_ms = 1795766400000));
+		const { deck } = live(raw);
+		expect(deck.stations.flatMap((item) => item.streams).every((item) => item.arrivals === null)).toBe(true);
+		expect(stationText("fixture-scribe", raw)).toContain("arrivals   unknown");
 	});
 
 	it("a partial stream list with no count says more may exist, never +0", () => {
