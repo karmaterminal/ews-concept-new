@@ -398,3 +398,17 @@ describe("🌿 round 2 on ews#14 (W-1, W-2) and 🌫's tag nit", () => {
 		expect(text).not.toContain("secret_token");
 	});
 });
+
+describe("end to end: a held board (frond-ear's own producer under host mute)", () => {
+	// Made by frond-ear's producer (7fe187d) through its real record consumer and daemon, with the host daemon's
+	// receptor muted: the guide lists nothing, and says the board is held empty, not quiet.
+	const MUTED = JSON.parse(readFileSync(join(import.meta.dirname, "fixtures", "house-export.muted.json"), "utf8")) as unknown;
+
+	it("says the gap, and never prints a held station's empty list as none heard", () => {
+		const { deck, reader } = live(MUTED);
+		const text = renderHouseCard(deck, reader);
+		expect(text).toContain("  gaps       walk complete · host_mute ×1");
+		expect(text).not.toContain("none heard");
+		expect(text).toContain("streams    none listed (more may exist)");
+	});
+});

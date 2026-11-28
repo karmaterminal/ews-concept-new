@@ -295,6 +295,8 @@ function streamsLine(station: CardStation, heard: CardStream[]): string {
 			? "not known (the board was held, muted or not read)"
 			: `${heard.map((item) => item.stream).join(", ")}; ${unknown} more not known`;
 	}
+	// An empty list that isn't known whole was never heard as quiet: it lists nothing, that is all.
+	if (station.streams_known === "partial" && station.streams.length === 0) return "none listed (more may exist)";
 	const names = heard.length > 0 ? heard.map((item) => item.stream).join(", ") : "none heard";
 	if (station.streams_known !== "partial") return names;
 	if (station.streams_given === null) return `${names} (more may exist)`;
