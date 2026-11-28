@@ -138,6 +138,62 @@ describe("🌿 on ews#16: the frond-ear CLI runs with an allowlisted environment
 		expect(check("--from", output(), "--timeout-ms", "500").code).toBe(2);
 	});
 
+	it.each([
+		["a grandchild that sleeps", `spawn("sleep", ["300"], { stdio: ["ignore", "inherit", "inherit"] })`, ""],
+		// SIGTERM is ignored by both, so only the SIGKILL after the grace stops them.
+		[
+			"a CLI and a grandchild that ignore SIGTERM",
+			`spawn("sh", ["-c", "trap '' TERM; exec sleep 300"], { stdio: ["ignore", "inherit", "inherit"] })`,
+			`process.on("SIGTERM", () => {});`,
+		],
+	])("🌿 on ews#17: a timeout stops the CLI's whole process group: %s", async (_, grandchild, cli) => {
+		// The stub starts a grandchild that sleeps 300 s and holds stdout, records both pids, then hangs.
+		const { dir, seen } = stubCheckout(
+			[
+				`import { spawn } from "node:child_process";`,
+				`import { writeFileSync } from "node:fs";`,
+				cli,
+				`const child = ${grandchild};`,
+				`writeFileSync(SEEN, JSON.stringify({ cli: process.pid, grandchild: child.pid }));`,
+				`setTimeout(() => {}, 300_000);`,
+			].join("\n"),
+		);
+		// Gone means no such pid, or (for the instant before its new parent reaps it) a zombie that runs nothing.
+		const running = (pid: number) => {
+			try {
+				process.kill(pid, 0);
+			} catch {
+				return false;
+			}
+			try {
+				return !/^\d+ \(.*\) Z /.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+			} catch {
+				return false;
+			}
+		};
+		let pids: { cli: number; grandchild: number } | undefined;
+		try {
+			const started = Date.now();
+			const r = check("--frond-ear", dir, "--timeout-ms", "1000");
+			const took = Date.now() - started;
+			pids = JSON.parse(readFileSync(seen, "utf8")) as { cli: number; grandchild: number };
+			expect(pids.grandchild).toBeGreaterThan(0);
+			const deadline = Date.now() + 5_000;
+			while ((running(pids.cli) || running(pids.grandchild)) && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			expect([pids.cli, pids.grandchild].filter(running)).toEqual([]);
+			expect(r.code).toBe(2);
+			expect(r.err).toContain("timed out after 1 s");
+			expect(took).toBeLessThan(20_000);
+		} finally {
+			// Never leave one behind, whatever an assertion said: by pid, only the two this stub recorded.
+			for (const pid of pids === undefined ? [] : [pids.cli, pids.grandchild]) {
+				if (running(pid)) process.kill(pid, "SIGKILL");
+			}
+		}
+	}, 90_000);
+
 	it("a CLI that exits nonzero is exit 2, never a pass", () => {
 		const { dir } = stubCheckout(`process.stdout.write(${JSON.stringify(GOOD_DOC)});\nprocess.exit(1);`);
 		expect(check("--frond-ear", dir).code).toBe(2);

@@ -240,8 +240,9 @@ pnpm --silent check-gap-names --frond-ear ~/path/to/frond-ear     # runs its `ho
 pnpm --silent check-gap-names --from gap-names.json              # or reads that output, saved
 ```
 
-The checkout's CLI runs with `PATH` and `HOME` only, so no token in your environment reaches it, and it is stopped
-after 30 s (`--timeout-ms <n>` changes that; a timeout is exit 2). It exits 1 and names each difference: a name missing
+The checkout's CLI runs with `PATH` and `HOME` only, so no token in your environment reaches it. It runs in its own
+process group, and after 30 s that whole group is stopped, anything it started included (`--timeout-ms <n>` changes
+the limit; a timeout is exit 2). It exits 1 and names each difference: a name missing
 from the card's table or the fixture, one frond-ear no longer emits, or one whose push class moved. Update `gaps.ts`,
 and refresh the fixture and its `commit` in the same change.
 
