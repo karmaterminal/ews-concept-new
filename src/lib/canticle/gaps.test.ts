@@ -82,6 +82,26 @@ describe("the card's gap table is frond-ear's list, at the fixture's commit", ()
 	});
 });
 
+describe("🌿's wording nits on ews#15: each line says every way its name fires", () => {
+	it("canticle_state_unknown covers a stopped or refused source, not only an unread state", () => {
+		const line = gapLine("canticle_state_unknown") as string;
+		expect(line).toContain("stopped");
+		expect(line).toContain("refused");
+	});
+
+	it("daemon_unreachable covers a daemon that refused, not only one not reached", () => {
+		expect(gapLine("daemon_unreachable")).toContain("refused");
+	});
+
+	it.each(["canticle_state_unknown", "canticle_state_changed", "canticle_state_contradicts", "daemon_unreachable"])(
+		"%s says payload text becomes unknown",
+		(name) => {
+			const [, push] = (gapLine(name) as string).split(" → ");
+			expect(push).toContain("payload text is unknown");
+		},
+	);
+});
+
 describe("adding names keeps the card's safety", () => {
 	const plain = (() => {
 		const { deck, reader } = withGaps([]);

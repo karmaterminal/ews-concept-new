@@ -24,8 +24,10 @@ const PUSH: Record<Exclude<GapPush, "local">, string> = {
 	coverage: "every station's list is partial",
 };
 
-/** A local gap says its own push; the others push as their class does. */
-export type Gap = { push: Exclude<GapPush, "local">; means: string } | { push: "local"; means: string; local: string };
+/** A local gap says its own push; the others push as their class does, after any `also` of their own. */
+export type Gap =
+	| { push: Exclude<GapPush, "local">; means: string; also?: string }
+	| { push: "local"; means: string; local: string };
 
 const TABLE: ReadonlyArray<[string, Gap]> = [
 	// held (frond-ear BOARD_EMPTY)
@@ -59,12 +61,33 @@ const TABLE: ReadonlyArray<[string, Gap]> = [
 		"unrecognized_word",
 		{ push: "coverage", means: "a presence, verification or listener word the export doesn't know; read as unknown" },
 	],
-	["canticle_state_unknown", { push: "coverage", means: "the daemon's canticle state couldn't be read" }],
-	["canticle_state_changed", { push: "coverage", means: "the daemon's canticle state differed between its two reads" }],
-	["canticle_state_contradicts", { push: "coverage", means: "the guide contradicts the daemon's canticle state" }],
+	[
+		"canticle_state_unknown",
+		{
+			push: "coverage",
+			means: "the daemon's canticle state is unknown: not given, a word the export doesn't know, or its source stopped or refused",
+			also: "payload text is unknown",
+		},
+	],
+	[
+		"canticle_state_changed",
+		{
+			push: "coverage",
+			means: "the daemon's canticle state differed between its two reads",
+			also: "payload text is unknown",
+		},
+	],
+	[
+		"canticle_state_contradicts",
+		{ push: "coverage", means: "the guide contradicts the daemon's canticle state", also: "payload text is unknown" },
+	],
 	[
 		"daemon_unreachable",
-		{ push: "coverage", means: "the running daemon wasn't reached; the config file alone is no reading" },
+		{
+			push: "coverage",
+			means: "the running daemon wasn't reached, or refused or garbled its first answers; the config file alone is no reading",
+			also: "payload text is unknown",
+		},
 	],
 	[
 		"canticle_off",
@@ -161,5 +184,6 @@ export function knownGap(name: string): boolean {
 export function gapLine(name: string): string | null {
 	const gap = GAP_TABLE.get(name);
 	if (gap === undefined) return null;
-	return `${gap.means} → ${gap.push === "local" ? gap.local : PUSH[gap.push]}`;
+	if (gap.push === "local") return `${gap.means} → ${gap.local}`;
+	return `${gap.means} → ${gap.also === undefined ? "" : `${gap.also}; `}${PUSH[gap.push]}`;
 }
