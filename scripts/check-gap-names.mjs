@@ -4,10 +4,14 @@
 //   node scripts/check-gap-names.mjs --frond-ear ~/path/to/frond-ear   runs that checkout's
 //                                                                       `node src/cli.ts house-export --gap-names`
 //   node scripts/check-gap-names.mjs --from gap-names.json              reads output saved from it
+//   add --timeout-ms <n> to --frond-ear to change its 30 s limit
+// The checkout's CLI runs with PATH and HOME only (🌿 on ews#16): no token or other secret in this environment
+// reaches it. It runs in its own process group, and a CLI that hasn't finished at the limit is stopped with that whole
+// group (🌿 on ews#17): SIGTERM, then SIGKILL after a short grace, so no grandchild it started is left behind.
 // Exit 0: every name and every push class match. Exit 1: they differ (each difference is printed). Exit 2: the input
-// isn't frond-ear's gap-names document, or the checkout couldn't run it.
+// isn't frond-ear's gap-names document, or the checkout couldn't run it, or it timed out.
 // Needs Node 23.6 or later (type stripping).
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -15,7 +19,68 @@ const { GAP_TABLE } = await import("../src/lib/canticle/gaps.ts");
 const FIXTURE_PATH = join(import.meta.dirname, "..", "src", "lib", "canticle", "fixtures", "frond-ear-gap-names.json");
 
 const KIND = "frond-house-gap-names/0";
-const USAGE = "usage: check-gap-names (--frond-ear <checkout> | --from <gap-names.json>)";
+const USAGE = "usage: check-gap-names (--frond-ear <checkout> [--timeout-ms <n>] | --from <gap-names.json>)";
+const DEFAULT_TIMEOUT_MS = 30_000;
+/** All the CLI needs: PATH to find git for its revision word, HOME for git's own config. */
+const CHILD_ENV_KEYS = ["PATH", "HOME"];
+/** Between SIGTERM and SIGKILL to the CLI's process group on a timeout. */
+const KILL_GRACE_MS = 1_000;
+
+/** Signals the whole process group `pid` leads; a group already gone is fine. */
+function signalGroup(pid, signal) {
+	try {
+		process.kill(-pid, signal);
+	} catch (error) {
+		if (error?.code !== "ESRCH") throw error;
+	}
+}
+
+/**
+ * Runs the checkout's CLI in its own process group. Resolves with its stdout and exit status, or with `timedOut`
+ * once the group was stopped: then it doesn't wait for pipes a process outside the group may still hold.
+ */
+function runCli(where, env, timeoutMs) {
+	return new Promise((resolve) => {
+		let child;
+		try {
+			child = spawn(process.execPath, [join(where, "src", "cli.ts"), "house-export", "--gap-names"], {
+				stdio: ["ignore", "pipe", "pipe"],
+				env,
+				detached: true,
+			});
+		} catch {
+			resolve({ failed: true });
+			return;
+		}
+		let stdout = "";
+		let done = false;
+		let timedOut = false;
+		const finish = (result) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			resolve(result);
+		};
+		child.stdout.setEncoding("utf8");
+		child.stdout.on("data", (chunk) => (stdout += chunk));
+		child.stderr.resume();
+		child.on("error", () => finish({ failed: true }));
+		child.on("close", (status) => {
+			// Stopped at the limit: whatever of its group outlived SIGTERM gets SIGKILL now, not after the grace.
+			if (timedOut) signalGroup(child.pid, "SIGKILL");
+			finish(timedOut ? { timedOut: true } : { status, stdout });
+		});
+		const timer = setTimeout(() => {
+			if (child.pid === undefined) return finish({ failed: true });
+			timedOut = true;
+			signalGroup(child.pid, "SIGTERM");
+			setTimeout(() => {
+				signalGroup(child.pid, "SIGKILL");
+				finish({ timedOut: true });
+			}, KILL_GRACE_MS);
+		}, timeoutMs);
+	});
+}
 
 function refuse(message) {
 	console.error(`check-gap-names: ${message}`);
@@ -23,8 +88,15 @@ function refuse(message) {
 }
 
 const args = process.argv.slice(2);
-if (args.length !== 2 || !["--frond-ear", "--from"].includes(args[0])) refuse(USAGE);
-const [how, where] = args;
+if (args.length < 2 || !["--frond-ear", "--from"].includes(args[0])) refuse(USAGE);
+const [how, where, ...rest] = args;
+let timeoutMs = DEFAULT_TIMEOUT_MS;
+if (rest.length > 0) {
+	if (how !== "--frond-ear" || rest.length !== 2 || rest[0] !== "--timeout-ms" || !/^[1-9][0-9]{0,6}$/.test(rest[1])) {
+		refuse(USAGE);
+	}
+	timeoutMs = Number(rest[1]);
+}
 
 let text;
 if (how === "--from") {
@@ -34,14 +106,15 @@ if (how === "--from") {
 		refuse(`${where} could not be read`);
 	}
 } else {
-	try {
-		text = execFileSync(process.execPath, [join(where, "src", "cli.ts"), "house-export", "--gap-names"], {
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "pipe"],
-		});
-	} catch {
+	const env = Object.fromEntries(CHILD_ENV_KEYS.filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]]));
+	const run = await runCli(where, env, timeoutMs);
+	if (run.timedOut) {
+		refuse(`${where}: \`node src/cli.ts house-export --gap-names\` timed out after ${timeoutMs / 1000} s and was stopped`);
+	}
+	if (run.failed || run.status !== 0) {
 		refuse(`${where}: \`node src/cli.ts house-export --gap-names\` failed (is it a frond-ear checkout with --gap-names?)`);
 	}
+	text = run.stdout;
 }
 
 let doc;
