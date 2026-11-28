@@ -12,7 +12,8 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run",
-		"house-card": "node scripts/render-house-card.mjs"
+		"house-card": "node scripts/render-house-card.mjs",
+		"check-gap-names": "node scripts/check-gap-names.mjs"
 	},
 	"devDependencies": {
 		"@iconify/svelte": "^5.2.2",
