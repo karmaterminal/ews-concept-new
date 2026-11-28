@@ -7,7 +7,9 @@
 //   add --timeout-ms <n> to --frond-ear to change its 30 s limit
 // The checkout's CLI runs with PATH and HOME only (🌿 on ews#16): no token or other secret in this environment
 // reaches it. It runs in its own process group, and a CLI that hasn't finished at the limit is stopped with that whole
-// group (🌿 on ews#17): SIGTERM, then SIGKILL after a short grace, so no grandchild it started is left behind.
+// group (🌿 on ews#17): SIGTERM, then SIGKILL after a short grace. That reaches the CLI and its
+// descendants still in its process group; one that left the group (its own session) is out of reach (🌫). A CLI that
+// writes more than 1 MiB to stdout is stopped the same way; its stderr is drained and not counted.
 // Exit 0: every name and every push class match. Exit 1: they differ (each difference is printed). Exit 2: the input
 // isn't frond-ear's gap-names document, or the checkout couldn't run it, or it timed out.
 // Needs Node 23.6 or later (type stripping).
@@ -23,6 +25,8 @@ const USAGE = "usage: check-gap-names (--frond-ear <checkout> [--timeout-ms <n>]
 const DEFAULT_TIMEOUT_MS = 30_000;
 /** All the CLI needs: PATH to find git for its revision word, HOME for git's own config. */
 const CHILD_ENV_KEYS = ["PATH", "HOME"];
+/** The most the CLI may write to stdout, in bytes (🌫 on ews#17): spawnSync's old default bound, kept explicit. */
+const MAX_STDOUT_BYTES = 1024 * 1024;
 /** Between SIGTERM and SIGKILL to the CLI's process group on a timeout. */
 const KILL_GRACE_MS = 1_000;
 
@@ -36,8 +40,10 @@ function signalGroup(pid, signal) {
 }
 
 /**
- * Runs the checkout's CLI in its own process group. Resolves with its stdout and exit status, or with `timedOut`
- * once the group was stopped: then it doesn't wait for pipes a process outside the group may still hold.
+ * Runs the checkout's CLI in its own process group. Resolves with its stdout and exit status; with `timedOut` once
+ * the group was stopped at the limit; or with `tooBig` once its stdout passed MAX_STDOUT_BYTES and the group was
+ * killed.
+ * Stopped, it doesn't wait for pipes a process outside the group may still hold.
  */
 function runCli(where, env, timeoutMs) {
 	return new Promise((resolve) => {
@@ -52,7 +58,8 @@ function runCli(where, env, timeoutMs) {
 			resolve({ failed: true });
 			return;
 		}
-		let stdout = "";
+		const chunks = [];
+		let bytes = 0;
 		let done = false;
 		let timedOut = false;
 		const finish = (result) => {
@@ -61,14 +68,22 @@ function runCli(where, env, timeoutMs) {
 			clearTimeout(timer);
 			resolve(result);
 		};
-		child.stdout.setEncoding("utf8");
-		child.stdout.on("data", (chunk) => (stdout += chunk));
+		child.stdout.on("data", (chunk) => {
+			if (done) return;
+			bytes += chunk.length;
+			if (bytes > MAX_STDOUT_BYTES) {
+				signalGroup(child.pid, "SIGKILL");
+				finish({ tooBig: true });
+				return;
+			}
+			chunks.push(chunk);
+		});
 		child.stderr.resume();
 		child.on("error", () => finish({ failed: true }));
 		child.on("close", (status) => {
 			// Stopped at the limit: whatever of its group outlived SIGTERM gets SIGKILL now, not after the grace.
 			if (timedOut) signalGroup(child.pid, "SIGKILL");
-			finish(timedOut ? { timedOut: true } : { status, stdout });
+			finish(timedOut ? { timedOut: true } : { status, stdout: Buffer.concat(chunks).toString("utf8") });
 		});
 		const timer = setTimeout(() => {
 			if (child.pid === undefined) return finish({ failed: true });
@@ -108,6 +123,11 @@ if (how === "--from") {
 } else {
 	const env = Object.fromEntries(CHILD_ENV_KEYS.filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]]));
 	const run = await runCli(where, env, timeoutMs);
+	if (run.tooBig) {
+		refuse(
+			`${where}: \`node src/cli.ts house-export --gap-names\` printed more than ${MAX_STDOUT_BYTES / 1024 / 1024} MiB on stdout and was stopped`,
+		);
+	}
 	if (run.timedOut) {
 		refuse(`${where}: \`node src/cli.ts house-export --gap-names\` timed out after ${timeoutMs / 1000} s and was stopped`);
 	}

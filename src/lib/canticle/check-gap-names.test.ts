@@ -200,3 +200,98 @@ describe("🌿 on ews#16: the frond-ear CLI runs with an allowlisted environment
 	});
 });
 
+describe("🌫 on ews#17: an output cap, and what a timeout stops", () => {
+	/** Gone: no such pid, or a zombie waiting for its reaper (it runs nothing). */
+	const running = (pid: number) => {
+		try {
+			process.kill(pid, 0);
+		} catch {
+			return false;
+		}
+		try {
+			return !/^\d+ \(.*\) Z /.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+		} catch {
+			return false;
+		}
+	};
+	const settle = async (pids: number[]) => {
+		const deadline = Date.now() + 5_000;
+		while (pids.some(running) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+		return pids.filter(running);
+	};
+	/** GOOD_DOC padded with JSON whitespace to `bytes`: still a valid document. */
+	const padded = (bytes: number) => GOOD_DOC + " ".repeat(bytes - Buffer.byteLength(GOOD_DOC));
+
+	it("a CLI that prints 2 MiB on stdout (a valid document) and exits 0 is stopped at the 1 MiB stdout cap: exit 2, and its group is gone", async () => {
+		const { dir, seen } = stubCheckout(
+			[
+				`import { spawn } from "node:child_process";`,
+				`import { writeFileSync } from "node:fs";`,
+				`const child = spawn("sleep", ["300"], { stdio: "ignore" });`,
+				`writeFileSync(SEEN, JSON.stringify({ cli: process.pid, grandchild: child.pid }));`,
+				`process.stdout.write(${JSON.stringify(padded(2 * 1024 * 1024))}, () => process.exit(0));`,
+			].join("\n"),
+		);
+		let pids: number[] = [];
+		try {
+			const r = check("--frond-ear", dir);
+			const seenPids = JSON.parse(readFileSync(seen, "utf8")) as { cli: number; grandchild: number };
+			pids = [seenPids.cli, seenPids.grandchild];
+			expect(r.code).toBe(2);
+			expect(r.err).toContain("printed more than 1 MiB on stdout and was stopped");
+			expect(await settle(pids)).toEqual([]);
+		} finally {
+			for (const pid of pids) if (running(pid)) process.kill(pid, "SIGKILL");
+		}
+	}, 60_000);
+
+	it("output just under the cap is read whole", () => {
+		const { dir } = stubCheckout(`process.stdout.write(${JSON.stringify(padded(1024 * 1024 - 1))});`);
+		const r = check("--frond-ear", dir);
+		expect(r.err).toBe("");
+		expect(r.code).toBe(0);
+	});
+
+	it("the cap is 1 MiB of stdout bytes, and only stdout is counted", () => {
+		const script = readFileSync(SCRIPT, "utf8");
+		expect(script).toMatch(/const MAX_STDOUT_BYTES = 1024 \* 1024;/);
+		const docs = readFileSync(join(import.meta.dirname, "..", "..", "..", "docs", "frond-house.md"), "utf8");
+		for (const text of [script, docs]) expect(text).not.toMatch(/MAX_OUTPUT_BYTES|[Oo]utput past 1 MiB|prints more than 1 MiB is/);
+		// stderr is drained, not counted: 2 MiB of it beside a good stdout still passes.
+		const { dir } = stubCheckout(`process.stderr.write("x".repeat(2 * 1024 * 1024));\nprocess.stdout.write(${JSON.stringify(GOOD_DOC)});`);
+		expect(check("--frond-ear", dir).code).toBe(0);
+	});
+
+	it("a timeout stops descendants still in the CLI's process group, and says only that", async () => {
+		// One grandchild stays in the group; one leaves it (its own session). Only the first is the script's to stop.
+		const { dir, seen } = stubCheckout(
+			[
+				`import { spawn } from "node:child_process";`,
+				`import { writeFileSync } from "node:fs";`,
+				`const inGroup = spawn("sleep", ["300"], { stdio: "ignore" });`,
+				`const left = spawn("sleep", ["300"], { stdio: "ignore", detached: true });`,
+				`writeFileSync(SEEN, JSON.stringify({ cli: process.pid, inGroup: inGroup.pid, left: left.pid }));`,
+				`setTimeout(() => {}, 300_000);`,
+			].join("\n"),
+		);
+		let pids: number[] = [];
+		try {
+			const r = check("--frond-ear", dir, "--timeout-ms", "1000");
+			const p = JSON.parse(readFileSync(seen, "utf8")) as { cli: number; inGroup: number; left: number };
+			pids = [p.cli, p.inGroup, p.left];
+			expect(r.code).toBe(2);
+			expect(await settle([p.cli, p.inGroup])).toEqual([]);
+			// The one that left the group is out of reach: the script never claims it.
+			expect(running(p.left)).toBe(true);
+			const docs = readFileSync(join(import.meta.dirname, "..", "..", "..", "docs", "frond-house.md"), "utf8");
+			const script = readFileSync(SCRIPT, "utf8");
+			for (const text of [docs, script]) {
+				expect(text).not.toMatch(/anything it started|no grandchild it started/);
+				expect(text).toMatch(/descendants still in its process group/);
+			}
+		} finally {
+			for (const pid of pids) if (running(pid)) process.kill(pid, "SIGKILL");
+		}
+	}, 60_000);
+});
+
